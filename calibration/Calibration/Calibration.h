@@ -17,6 +17,8 @@ struct Calibration
 	Eigen::Matrix3f R;
 	Eigen::Vector3f t;
 
+	std::vector<Quad> quads;
+
 	// And any other camera parameters
 };
 
@@ -27,6 +29,6 @@ bool CheckerDetection(const cv::Mat& checkerboard, std::vector<Quad>& quads);
 
 bool ComputeIntrinsicsAndExtrinsicFromHomography(const Eigen::Matrix3f& H, Eigen::Matrix3f& K, Eigen::Matrix3f& T);
 
-std::vector<std::pair<cv::Point, cv::Point>> MatchCornersForHomography(std::vector<Quad>& gtQuads, std::vector<Quad>& quads)
+std::vector<std::pair<cv::Point, cv::Point>> MatchCornersForHomography(std::vector<Quad>& gtQuads, std::vector<Quad>& quads);
 
-void AssociateAllCorners(std::vector<Quad>& gtQuads, std::vector<Quad>& quads);
+void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads);

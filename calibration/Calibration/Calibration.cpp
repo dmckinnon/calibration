@@ -390,21 +390,151 @@ vector<pair<Point, Point>> MatchCornersForHomography(vector<Quad>& gtQuads, vect
 	int stepsToCorner1 = FindCornerFromEdgeQuad(connectedQuad, branches[0], quads, corner1) + 2;
 	int stepsToCorner2 = FindCornerFromEdgeQuad(connectedQuad, branches[1], quads, corner2) + 2;
 
-	// now figure out which corner is which
+	Quad closeCorner = stepsToCorner1 > stepsToCorner2 ? corner2 : corner1;
+	Quad farCorner = stepsToCorner1 > stepsToCorner2 ? corner1 : corner2;
 
+	// if the original corner is higher than its closest neighbouring corner
+	// We'll say this is the top left. Otherwise, it's the bottom right
+	if (corners[0].centre.y < closeCorner.centre.y)
+	{
+		corners[0].number = 1;
+		matches.push_back(pair<Point, Point>(topleft.centre, corners[0].centre));
+		
+		for (int i = 1; i < 4; ++i)
+		{
+			// This means that the close corner is the bottom left
+			if (corners[i].centre == closeCorner.centre)
+			{
+				corners[i].number = 28;
+				matches.push_back(pair<Point, Point>(bottomleft.centre, corners[i].centre));
+				break;
+			}
 
+			// far corner is the top right
+			else if (corners[i].centre == farCorner.centre)
+			{
+				corners[i].number = 5;
+				matches.push_back(pair<Point, Point>(topright.centre, corners[i].centre));
+				break;
+			}
+
+			// and the final corner is the bottom right
+			else
+			{
+				corners[i].number = 32;
+				matches.push_back(pair<Point, Point>(bottomright.centre, corners[i].centre));
+				break;
+			}
+		}
+	}
+	else
+	{
+		// Now under this case, corner[0] is the bottom right
+		corners[0].number = 32;
+		matches.push_back(pair<Point, Point>(bottomright.centre, corners[0].centre));
+
+		for (int i = 1; i < 4; ++i)
+		{
+			// This means that the close corner is the top right
+			if (corners[i].centre == closeCorner.centre)
+			{
+				corners[i].number = 5;
+				matches.push_back(pair<Point, Point>(topright.centre, corners[i].centre));
+				break;
+			}
+
+			// far corner is the bottom left
+			else if (corners[i].centre == farCorner.centre)
+			{
+				corners[i].number = 28;
+				matches.push_back(pair<Point, Point>(bottomleft.centre, corners[i].centre));
+				break;
+			}
+
+			// and the final corner is the top left
+			else
+			{
+				corners[i].number = 1;
+				matches.push_back(pair<Point, Point>(topleft.centre, corners[i].centre));
+				break;
+			}
+		}
+	}
 
 	return matches;
 }
 
 /*
-	Associate Corners
+	Transform and number quads
 
-	In this we 
+	H is expected to transform the plane the quads are in to the ground truth plane
+	where is it a trivial matter to scan through and assign the correct number to each quad
+
+	We use a bound of half the transformed top left quad's diagonal as the measure for whether
+	or not another quad is in the same column or row
+
 */
-void AssociateAllCorners(vector<Quad>& gtQuads, vector<Quad>& quads)
+void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 {
+	// First, transform all quads
+	for (Quad& q : quads)
+	{
+		Vector3f x(q.centre.x, q.centre.y, 1);
+		Vector3f Hx = H * x;
+		Hx / Hx(2);
+		q.centre = Point(Hx(0), Hx(1));
+	}
 
+	// Second, copy vector locally for modification
+	vector<Quad> localQuads(quads);
+	vector<Quad> orderedQuads;
+
+	// Third, take the topmost quad. Find everything in its row.
+	// order from left to right. Number them, remove them
+	while (!localQuads.empty())
+	{
+		// Get the top quad, remove it
+		Quad topQuad;
+		topQuad.centre = Point(100000,100000); // obviously not the top Quad
+		int topIndex = 0;
+		for (int i = 0; i < localQuads.size(); ++i)
+		{
+			Quad& q = localQuads[i];
+			if (q.centre.y < topQuad.centre.y)
+			{
+				topQuad = q;
+				topIndex = i;
+			}
+		}
+		vector<Quad> thisRow;
+		vector<int> thisRowsIndices;
+		thisRow.push_back(topQuad);
+		thisRowsIndices.push_back(topIndex);
+
+		// Get margin of error
+		int margin = L2norm(topQuad.centre - topQuad.points[0]);
+
+		// Find all quads in this row
+		for (int i = 0; i < localQuads.size(); ++i)
+		{
+			Quad& q = localQuads[i];
+			if (L2norm(q.centre - topQuad.centre) < margin/2 && q.centre != topQuad.centre)
+			{
+				thisRow.push_back(q);
+				thisRowsIndices.push_back(i);
+			}
+		}
+		
+		// Now remove all those quads from the main list
+		// Need to update indices or remvoe as we get them
+		for (int i = 0; i < thisRowsIndices.size(); ++i)
+		{
+			localQuads.erase(localQuads.begin() );
+		}
+
+	}
+
+	// Repeat
 }
 
 /*

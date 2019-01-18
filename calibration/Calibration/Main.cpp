@@ -97,6 +97,13 @@ int main(int argc, char** argv)
 	}
 	checkerboard.release();
 
+	// identity homography for gt quads to not transform them
+	Matrix3f I;
+	I << 1, 0, 0,
+		 0, 1, 0,
+		 0, 0, 1;
+	TransformAndNumberQuads(I, gtQuads);
+
 	/*********************************/
 	/* Get data from captured images */
 
@@ -125,17 +132,6 @@ int main(int argc, char** argv)
 
 		// set up matches and create homography
 		vector<pair<Point, Point>> matches = MatchCornersForHomography(gtQuads, quads);
-		//assert(checkerboardFeatures.size() == features.size());
-		for (unsigned int i = 0; i < quads.size(); ++i)
-		{
-			// Find the quads that have one corner only
-			// if there isn't four ... may just quit
-			// figure out which is the long side and short side by relative distance
-			// This should be a reasonable heuristic
-			// Then associate them with the gt points, create pairs that match
-			//matches.push_back(make_pair(checkerboardFeatures[i].p, features[i].p));
-		}
-		
 		Matrix3f H;
 		if (!GetHomographyFromMatches(matches, H))
 		{
@@ -143,8 +139,8 @@ int main(int argc, char** argv)
 			continue;
 		}
 
-		// Associate all corners from these quads for the purposes of optimisation
-		AssociateAllCorners(gtQuads, quads);
+		// Associate all quads from these quads for the purposes of optimisation
+		TransformAndNumberQuads(H, quads);
 
 		// Decompose into K matrix and extrinsics
 		Matrix3f K, T;
@@ -152,8 +148,6 @@ int main(int argc, char** argv)
 		{
 			cout << "Failed to compute intrinsics for image " << image + 1 << endl;
 		}
-
-		
 
 		// Store
 		Calibration c;
