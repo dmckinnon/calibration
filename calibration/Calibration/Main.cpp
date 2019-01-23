@@ -151,6 +151,7 @@ int main(int argc, char** argv)
 
 		// Store
 		Calibration c;
+		c.quads = quads;
 		c.K = K;
 		c.R << T(0,0), T(0,1), T(0,2),
 			   T(1,0), T(1,1), T(1,2),

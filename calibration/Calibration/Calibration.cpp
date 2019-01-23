@@ -491,6 +491,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 
 	// Third, take the topmost quad. Find everything in its row.
 	// order from left to right. Number them, remove them
+	int quadNumber = 1;
 	while (!localQuads.empty())
 	{
 		// Get the top quad, remove it
@@ -507,34 +508,61 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 			}
 		}
 		vector<Quad> thisRow;
-		vector<int> thisRowsIndices;
 		thisRow.push_back(topQuad);
-		thisRowsIndices.push_back(topIndex);
 
 		// Get margin of error
 		int margin = L2norm(topQuad.centre - topQuad.points[0]);
 
-		// Find all quads in this row
-		for (int i = 0; i < localQuads.size(); ++i)
+		// Find all quads in this row and remove them
+		while (true)
 		{
-			Quad& q = localQuads[i];
-			if (L2norm(q.centre - topQuad.centre) < margin/2 && q.centre != topQuad.centre)
+			// Find first available quad in this row
+			bool found = false;
+			int i = 0;
+			for (i = 0; i < localQuads.size(); ++i)
 			{
-				thisRow.push_back(q);
-				thisRowsIndices.push_back(i);
+				Quad& q = localQuads[i];
+				if (L2norm(q.centre - topQuad.centre) < margin / 2 && q.centre != topQuad.centre)
+				{
+					thisRow.push_back(q);
+					found = true;
+					break;
+				}
 			}
-		}
-		
-		// Now remove all those quads from the main list
-		// Need to update indices or remvoe as we get them
-		for (int i = 0; i < thisRowsIndices.size(); ++i)
-		{
-			localQuads.erase(localQuads.begin() );
+
+			// We found all the quads in this row that we could
+			if (!found)
+			{
+				break;
+			}
+
+			// Remove the quad
+			localQuads.erase(localQuads.begin() + i);
 		}
 
+		// Order quads
+		sort(thisRow.begin(), thisRow.end(), OrderTwoQuadsByAscendingCentreX);
+
+		// Number quads
+		for (unsigned int n = 0; n < thisRow.size(); ++n)
+		{
+			thisRow[n].number = quadNumber;
+			quadNumber++;
+		}
+
+		// Add to ordered list
+		for (Quad& q : thisRow)
+		{
+			orderedQuads.push_back(q);
+		}
 	}
 
 	// Repeat
+	quads.clear();
+	for (Quad& q : orderedQuads)
+	{
+		quads.push_back(q);
+	}
 }
 
 /*

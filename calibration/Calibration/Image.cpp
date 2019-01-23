@@ -897,6 +897,14 @@ void OrderQuads(const vector<Quad>& quads, vector<int>& checkerOrdering)
 }
 
 /*
+	Sort quads by x coordinate ascending
+*/
+bool OrderTwoQuadsByAscendingCentreX(Quad a, Quad b)
+{
+	return a.centre.x < b.centre.x;
+}
+
+/*
 DEBUG
 Draw a quad in an image. Should be the image they were found in
 */

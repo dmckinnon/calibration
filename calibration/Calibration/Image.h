@@ -84,5 +84,7 @@ bool DoesPointLieWithinQuadOfTwoCentres(const cv::Point& p, const Quad& q1, cons
 // Find the length of the longest diagonal of a quad
 float GetLongestDiagonal(const Quad& q);
 
+bool OrderTwoQuadsByAscendingCentreX(Quad a, Quad b);
+
 // DEBUG - draw quad in an image
 void DrawQuad(const cv::Mat& input, const Quad& q);
