@@ -572,12 +572,37 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// upper triangular numpty
 	// perform LDLT decomposition
 	// normalise first L, that's K
+	// This is because K is already upper triangular
+
 	// DLT is the homography
 	// Make sure r1 and r2 are orthogonal
 */
 bool ComputeIntrinsicsAndExtrinsicFromHomography(const Matrix3f& H, Matrix3f& K, Matrix3f& T)
 {
-	
+	LDLT<Matrix3f> ldlt(3);
+
+	ldlt.compute(H);
+
+	auto L = ldlt.matrixL();
+	K = L;
+	auto DLT = K.inverse() * H;
+
+	// Now to get the homography
+	// So we have a three-by-three for rotation, except one of the rotation vectors
+	// is irrelevant and I've forgotten why, and therefor the last bit is the translation
+
+	// Set T = DL^T
+    // Check that the first two columns are orthogonal
+	T = DLT;
+	Vector3f r0 = T.col(0);
+	Vector3f r1 = T.col(1);
+
+	// r0 dot r1 should be 0
+	if (r0.dot(r1) != 0)
+	{
+		cout << "Rotation vectors are not orthogonal!" << endl;
+		return false;
+	}
 
 	return true;
 }

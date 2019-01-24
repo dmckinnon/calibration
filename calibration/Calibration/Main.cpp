@@ -50,8 +50,7 @@ using namespace Eigen;
 
 
 	TODO:
-	- Algorithm to number quads. This then is applied after the homography
-	- Then 
+	- Test before refinement!!
 
 	LOG:
 	- Now we can find the corners (to debug)
