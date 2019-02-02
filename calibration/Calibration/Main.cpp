@@ -48,9 +48,14 @@ using namespace Eigen;
 	TO add:
 	- distortion model
 
+	Test this all with P3P!
+
 
 	TODO:
 	- Test before refinement!!
+	- Corners might not be linking
+	- quad numbering infinite-loops
+	- 
 
 	LOG:
 	- Now we can find the corners (to debug)
@@ -103,6 +108,16 @@ int main(int argc, char** argv)
 		 0, 0, 1;
 	TransformAndNumberQuads(I, gtQuads);
 
+
+	// DEBUG
+	// COnfirm that all the quads are good
+	for (Quad q : gtQuads)
+	{
+		cout << "Quad number " << q.number << " has centre " << q.centre << endl;
+	}
+
+
+
 	/*********************************/
 	/* Get data from captured images */
 
@@ -118,7 +133,7 @@ int main(int argc, char** argv)
 	
 		// Get the quads in the image
 		vector<Quad> quads;
-		if (!CheckerDetection(img, gtQuads))
+		if (!CheckerDetection(img, quads))
 		{
 			cout << "Bad image for checkers in image " << image + 1 << endl;
 			continue;

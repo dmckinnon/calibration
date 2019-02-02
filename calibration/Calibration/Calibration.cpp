@@ -11,7 +11,7 @@ using namespace Eigen;
 #define RECT true
 #define CROSS false
 
-//#define DEBUG
+#define DEBUG
 
 /*
 	Align checkerboard.
@@ -58,7 +58,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 #ifdef DEBUG
 	namedWindow("threshold");
 	imshow("threshold", img);
-	waitKey(0);
+	//waitKey(0);
 #endif
 
 	// Now we iterate over eroding and checking for quadrangles
@@ -87,7 +87,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 #ifdef DEBUG
 		namedWindow("erode");
 		imshow("erode", erode);
-		waitKey(0);
+		//waitKey(0);
 #endif
 
 		// Find contours
@@ -154,10 +154,15 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 		}
 		else {
 			// No quads exist yet. Keep everything
-			copy(quadsThisIteration.begin(), quadsThisIteration.end(), back_inserter(quads));
+			for (Quad& q : quadsThisIteration)
+			{
+				quads.push_back(q);
+			}
 		}
 
-		
+#ifdef DEBUG
+		destroyAllWindows();
+#endif
 	}
 
 	// Link corners
@@ -494,6 +499,12 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	int quadNumber = 1;
 	while (!localQuads.empty())
 	{
+		if (quadNumber > 200)
+		{
+			break;
+		}
+
+
 		// Get the top quad, remove it
 		Quad topQuad;
 		topQuad.centre = Point(100000,100000); // obviously not the top Quad
@@ -522,7 +533,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 			for (i = 0; i < localQuads.size(); ++i)
 			{
 				Quad& q = localQuads[i];
-				if (L2norm(q.centre - topQuad.centre) < margin / 2 && q.centre != topQuad.centre)
+				if (abs(q.centre.y - topQuad.centre.y) < margin / 2 && q.centre != topQuad.centre)
 				{
 					thisRow.push_back(q);
 					found = true;

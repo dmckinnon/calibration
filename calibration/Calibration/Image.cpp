@@ -106,10 +106,15 @@ bool GaussianThreshold(const cv::Mat& input, cv::Mat& output, int kernelSize, in
 	// Over each pixel, for the neighbourhood around it, compute the mean
 	// and threshold
 	// Any points off-image are 0
+
+	float totalMean = 0;
+
 	for (int y = 0; y < input.rows; ++y)
 	{
 		for (int x = 0; x < input.cols; ++x)
 		{
+			totalMean += input.at<uint8_t>(y, x);
+			continue;
 			// For the neighbourhood around the pixel
 			float mean = 0;
 			int min = 255, max = 0;
@@ -158,6 +163,25 @@ bool GaussianThreshold(const cv::Mat& input, cv::Mat& output, int kernelSize, in
 			}
 		}
 	}
+
+	totalMean /= input.cols*input.rows;
+	for (int y = 0; y < input.rows; ++y)
+	{
+		for (int x = 0; x < input.cols; ++x)
+		{
+			int pixelToThreshold = input.at<uint8_t>(y, x);
+
+			if (pixelToThreshold > 127/*totalMean*/)
+			{
+				output.at<uint8_t>(y, x) = 255;
+			}
+			else
+			{
+				output.at<uint8_t>(y, x) = 0;
+			}
+		}
+	}
+
 
 	return true;
 }
@@ -451,7 +475,7 @@ void DrawContours(const cv::Mat& input, const std::vector<Contour>& contours)
 	}
 	namedWindow("contours");
 	imshow("contours", draw);
-	waitKey(0);
+	//waitKey(0);
 }
 
 /*
@@ -682,9 +706,18 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 		}*/
 
 		// Sanity check that we got all four corners
-		if (cornerIndex != 4)
+		// by confirming none of them are the same
+		for (int i = 0; i < 4; ++i)
 		{
-			return false;
+			auto& c1 = q.points[i];
+			for (int j = i+1; j < 4; ++j)
+			{
+				auto& c2 = q.points[j];
+				if (c1.x == c2.x && c1.y == c2.y)
+				{
+					return false;
+				}
+			}
 		}
 
 		// Compute the centre
@@ -712,49 +745,27 @@ float DistBetweenPoints(const Point& p1, const Point& p2)
 // Actual
 float GetLongestDiagonal(const Quad& q)
 {
-	// The diagional will be 1-2, 1-3, 1-4, 2-3, 2-4, or 3-4
-	vector<Point> points;
+	// Just go over all pairs of points and get the longest distance
+	// between two pairs
+	// Since a side won't be bigger than a diagonal unless we have a really
+	// weird lens
+	float maxDist = 0;
 	for (int i = 0; i < 4; ++i)
 	{
-		for (int k = 0; k < 4; ++k)
-		{
-			points.push_back(q.points[k]);
-		}
-
 		Point p1 = q.points[i];
-		points.erase(points.begin() + i);
-
-		for (int j = i; j < 4; ++j)
+		for (int j = i + 1; j < 4; ++j)
 		{
 			Point p2 = q.points[j];
-			points.erase(points.begin() + j);
 
-			// Get the non-absolute distance from either remaining point
-			// to the line defined by these two points
-			const int a = p2.y - p1.y;
-			const int b = p1.x - p2.x;
-			const int c = -1 * p1.x*a - p1.y*b;
-
-			const Point p3 = points[0];
-			const Point p4 = points[0];
-			float d1 = (a*p3.x + b * p3.y + c) / sqrt(a*a + b * b);
-			float d2 = (a*p4.x + b * p4.y + c) / sqrt(a*a + b * b);
-
-			// If both distances are negative or both positive, no diagonal
-			if ((d1 < 0 && d2 < 0) || (d1 > 0 && d2 > 0))
+			float dist = DistBetweenPoints(p1, p2);
+			if (dist > maxDist)
 			{
-				continue;
+				maxDist = dist;
 			}
-
-			// p1 and p2 form a diagonal
-			float diag1 = DistBetweenPoints(p1, p2);
-			float diag2 = DistBetweenPoints(p3, p4);
-			return diag1 > diag2 ? diag1 : diag2;
 		}
-		points.clear();
 	}
 
-	return 0;
+	return maxDist;
 }
 
 /*
@@ -919,5 +930,5 @@ void DrawQuad(const cv::Mat& input, const Quad& q)
 	}
 	namedWindow("quad");
 	imshow("quad", draw);
-	waitKey(0);
+	//waitKey(0);
 }

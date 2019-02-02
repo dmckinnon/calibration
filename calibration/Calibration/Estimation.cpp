@@ -641,7 +641,7 @@ vector<Point> FindLineInPointsRANSAC(const vector<Point>& points, const int inli
 		seedPoints.first = points[i1];
 		seedPoints.second = points[i2];
 
-		cout << "Searching on points " << points[i1] << " and " << points[i2];
+		//cout << "Searching on points " << points[i1] << " and " << points[i2];
 
 		// Check all other points. If they are within maxError of the line,
 		// then add them to the inlier set
@@ -653,7 +653,7 @@ vector<Point> FindLineInPointsRANSAC(const vector<Point>& points, const int inli
 				inliers.push_back(p);
 			}
 		}
-		cout << ". Inliers - " << inliers.size() << endl;
+		//cout << ". Inliers - " << inliers.size() << endl;
 		// If the inlier set is big enough, stop and set the seed points
 		if (inliers.size() >= inlierSetSize)
 		{
