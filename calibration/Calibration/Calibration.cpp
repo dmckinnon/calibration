@@ -56,7 +56,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 	}
 
 #ifdef DEBUG
-	namedWindow("threshold");
+	namedWindow("threshold", WINDOW_NORMAL);
 	imshow("threshold", img);
 	//waitKey(0);
 #endif
@@ -85,7 +85,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 		img = erode;
 
 #ifdef DEBUG
-		namedWindow("erode");
+		namedWindow("erode", WINDOW_NORMAL);
 		imshow("erode", erode);
 		//waitKey(0);
 #endif
@@ -161,7 +161,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 		}
 
 #ifdef DEBUG
-		destroyAllWindows();
+		//destroyAllWindows();
 #endif
 	}
 
@@ -171,15 +171,15 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 	// holds a pair of the ID of the other quad, plus the corner index it links to
 	for (int i = 0; i < quads.size(); ++i)
 	{
-		Quad q1 = quads[i];
+		Quad& q1 = quads[i];
 		const float diag1 = GetLongestDiagonal(q1);
 		for (int j = i; j < quads.size(); ++j)
 		{
-			Quad q2 = quads[j];
+			Quad& q2 = quads[j];
 
 			// Sanity check - if their centres are further away than twice the longest diagonal of the first quad, 
 			// ignore this quad
-			if (DistBetweenPoints(q1.centre, q2.centre) > 2 * diag1)
+			if (DistBetweenPoints(q1.centre, q2.centre) > 1.5 * diag1)
 			{
 				continue;
 			}
@@ -244,10 +244,58 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 		}
 	}
 
+#ifdef DEBUG_CORNERS
+	
+	// for each quad, draw all the matching corners
+	for (int i = 0; i < quads.size(); ++i)
+	{
+		Quad q1 = quads[i];
+
+		Mat cornerImg = checkerboard.clone();
+
+		for (int j = 0; j < 4; ++j)
+		{
+			if (q1.associatedCorners[j].first != -1)
+			{
+				Quad q2;
+				bool found = false;
+				for (Quad& q : quads)
+				{
+					if (q.id == q1.associatedCorners[j].first)
+					{
+						q2 = q;
+						found = true; 
+						break;
+					}
+				}
+				if (!found) continue;
+				rectangle(cornerImg, q1.centre, q2.centre/*points[q1.associatedCorners[j].second]*/, Scalar(128, 128, 128), CV_FILLED);
+				line(cornerImg, q1.points[0], q1.points[1], Scalar(128, 128, 128), 2);
+				line(cornerImg, q1.points[1], q1.points[2], Scalar(128, 128, 128), 2);
+				line(cornerImg, q1.points[2], q1.points[3], Scalar(128, 128, 128), 2);
+				line(cornerImg, q1.points[3], q1.points[0], Scalar(128, 128, 128), 2);
+				line(cornerImg, q2.points[0], q2.points[1], Scalar(128, 128, 128), 2);
+				line(cornerImg, q2.points[1], q2.points[2], Scalar(128, 128, 128), 2);
+				line(cornerImg, q2.points[2], q2.points[3], Scalar(128, 128, 128), 2);
+				line(cornerImg, q2.points[3], q2.points[0], Scalar(128, 128, 128), 2);
+				break;
+			}
+		}
+
+		
+
+		imshow("cornerAssociation", cornerImg);
+		waitKey(0);
+	}
+
+	
+#endif
+
 	// Make sure at least 90% of the desired number of quads have been found
 	if (quads.size() < 28)
 	{
-		return false;
+		//return false;
+
 	}
 
 	return true;
@@ -504,7 +552,6 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 			break;
 		}
 
-
 		// Get the top quad, remove it
 		Quad topQuad;
 		topQuad.centre = Point(100000,100000); // obviously not the top Quad
@@ -520,6 +567,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 		}
 		vector<Quad> thisRow;
 		thisRow.push_back(topQuad);
+		localQuads.erase(localQuads.begin() + topIndex);
 
 		// Get margin of error
 		int margin = L2norm(topQuad.centre - topQuad.points[0]);

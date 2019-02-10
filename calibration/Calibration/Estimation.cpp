@@ -623,7 +623,7 @@ vector<Point> FindLineInPointsRANSAC(const vector<Point>& points, const int inli
 
 	// Over the given number of iterations
 	const int length = points.size();
-	if (length == 0)
+	if (length == 0 || length == 1)
 	{
 		return inliers;
 	}

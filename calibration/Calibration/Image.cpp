@@ -422,6 +422,12 @@ void FloodFill(Mat& img, const Point& start, int newVal)
 
 	while (!stack.empty())
 	{
+		// sanity
+		if (stack.size() > img.cols*img.rows)
+		{
+			break;
+		}
+		
 		// Get the front of the stack and remove it
 		Point p = stack.back();
 		stack.pop_back();

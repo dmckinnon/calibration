@@ -17,7 +17,7 @@ using namespace Eigen;
 
 #define CHECKERBOARD_FILENAME "checkerboard.jpg"
 
-//#define DEBUG
+#define DEBUG
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -51,11 +51,16 @@ using namespace Eigen;
 	Test this all with P3P!
 
 
+	Issues:
+	- Corners might not be linking /// Corners seem fine?
+	- Flood fill loop is broken
+	- Contour detection goes on way too long
+	- not enough quads found in photos
+	- Corner association fails ... ?
+
 	TODO:
-	- Test before refinement!!
-	- Corners might not be linking
-	- quad numbering infinite-loops
-	- 
+	- refinement
+	- Read P3P
 
 	LOG:
 	- Now we can find the corners (to debug)
@@ -87,19 +92,14 @@ int main(int argc, char** argv)
 	Mat checkerboard = imread(folder + "\\" + CHECKERBOARD_FILENAME, IMREAD_GRAYSCALE);
 	
 		// Display for debug
-#ifdef DEBUG
-	Mat temp = checkerboard.clone();
-	// Debug display
-	imshow(debugWindowName, temp);
-	waitKey(0);
-#endif
+
 
 	vector<Quad> gtQuads;
 	if (!CheckerDetection(checkerboard, gtQuads))
 	{
 		return 1;
 	}
-	checkerboard.release();
+	//checkerboard.release();
 
 	// identity homography for gt quads to not transform them
 	Matrix3f I;
@@ -116,6 +116,23 @@ int main(int argc, char** argv)
 		cout << "Quad number " << q.number << " has centre " << q.centre << endl;
 	}
 
+#ifdef DEBUG
+	Mat temp = checkerboard.clone();
+
+	// Draw all the quad centres after the transformation
+	// on the image
+	for (Quad q : gtQuads)
+	{
+		putText(temp, std::to_string(q.number), q.centre,
+			FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+	}
+
+
+	// Debug display
+	imshow(debugWindowName, temp);
+	waitKey(0);
+#endif
+
 
 
 	/*********************************/
@@ -129,7 +146,7 @@ int main(int argc, char** argv)
 	for (int image = 0; image < numImages; ++image)
 	{
 		// Read in the image
-		Mat img = imread(folder + to_string(image+1) + ".jpg", IMREAD_GRAYSCALE);
+		Mat img = imread(folder + "\\" + to_string(image+1) + ".jpg", IMREAD_GRAYSCALE);
 	
 		// Get the quads in the image
 		vector<Quad> quads;
@@ -143,6 +160,7 @@ int main(int argc, char** argv)
 			cout << "No quads in image " << image + 1 << endl;
 			continue;
 		}
+		cout << "Found " << quads.size() << " quads" << endl;
 
 		// set up matches and create homography
 		vector<pair<Point, Point>> matches = MatchCornersForHomography(gtQuads, quads);
@@ -161,7 +179,9 @@ int main(int argc, char** argv)
 		if (!ComputeIntrinsicsAndExtrinsicFromHomography(H, K, T))
 		{
 			cout << "Failed to compute intrinsics for image " << image + 1 << endl;
-		}
+		}  
+
+		// number for debug
 
 		// Store
 		Calibration c;

@@ -8,7 +8,7 @@
 #include "Features.h"
 #include "Image.h"
 
-#define MAX_ERODE_ITERATIONS 4
+#define MAX_ERODE_ITERATIONS 10
 
 // structure for the calibration of a camera
 struct Calibration
