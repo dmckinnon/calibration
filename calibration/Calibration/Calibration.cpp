@@ -34,14 +34,8 @@ float L2norm(Point a)
 {
 	return sqrt(a.x*a.x + a.y*a.y);
 }
-bool EnumeratePerfectCheckboardCorners(std::vector<Feature>& features, Point& size)
-{
-	// 
-
-	return true;
-}
 // Actual Function
-bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
+bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 {
 	// Make a copy
 	Mat img = checkerboard.clone();
@@ -58,7 +52,8 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 #ifdef DEBUG
 	namedWindow("threshold", WINDOW_NORMAL);
 	imshow("threshold", img);
-	//waitKey(0);
+	if (debug)
+		waitKey(0);
 #endif
 
 	// Now we iterate over eroding and checking for quadrangles
@@ -87,19 +82,19 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 #ifdef DEBUG
 		namedWindow("erode", WINDOW_NORMAL);
 		imshow("erode", erode);
-		//waitKey(0);
+		if (debug) waitKey(0);
 #endif
 
 		// Find contours
 		vector<Contour> contours;
-		if (!FindContours(img, contours))
+		if (!FindContours(img, contours/*, debug*/))
 		{
 			continue;
 		}
 
 #ifdef DEBUG
 		// draw all the contours onto the eroded image
-		DrawContours(img, contours);
+		if (debug) DrawContours(img, contours);
 #endif
 
 		// get quadrangles from contours
@@ -119,7 +114,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 				quadsThisIteration.push_back(q);
 #ifdef DEBUG
 				// draw all the quads onto the image
-				DrawQuad(img, q);
+				if (debug) DrawQuad(img, q);
 #endif
 			}
 		}
@@ -294,7 +289,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads)
 	// Make sure at least 90% of the desired number of quads have been found
 	if (quads.size() < 28)
 	{
-		//return false;
+		return false;
 
 	}
 

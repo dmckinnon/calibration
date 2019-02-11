@@ -243,7 +243,32 @@ bool Erode(const cv::Mat& input, cv::Mat& output, cv::Mat erosionKernel)
 	signifies that this blob has been found. The image is searched further and this process
 	repeats
 */
-bool FindContours(const cv::Mat& input, std::vector<Contour>& contours)
+// I know this is hack but it's the best way I could get it working
+const cv::Point dirs[Contour::NUM_DIRS] =
+{
+	Point(0,-1),
+	Point(-1,-1),
+	Point(-1,0),
+	Point(-1,1),
+	Point(0,1),
+	Point(1,1),
+	Point(1,0),
+	Point(1,-1)
+};
+bool PixelIsAdjacentToWhite(const Mat& input, const Point& p)
+{
+	for (int i = 0; i < Contour::NUM_DIRS; ++i)
+	{
+		auto pixel = input.at<uchar>(p + dirs[i]);
+		if (pixel == WHITE)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+bool FindContours(const cv::Mat& input, std::vector<Contour>& contours, bool debug)
 {
 	Mat img = input.clone();
 
@@ -259,23 +284,20 @@ bool FindContours(const cv::Mat& input, std::vector<Contour>& contours)
 			auto pixel = input.at<uint8_t>(y, x);
 
 			// Find the beginning of a contour
-			if (pixel == BLACK)
+			if (pixel == BLACK && PixelIsAdjacentToWhite(input, Point(x,y)))
 			{
 				start = Point(x, y);
-				//currentContour.start = start;
-				//currentContour.length = 1;
-				//input.at<uint8_t>(y, x) == USED;
-
-				// Search from the right down and around
-				// Search relative to the last spot
-
-
 				// use a separate function to walk this
-				Contour c = FindContour(img, start); // this is what's wrong
+				//Contour c = FindContour(img, start); // this is what's wrong
+				Contour c = FloodFillEdgePixels(img, start, USED);
 				if (c.path.size() > MIN_PATH_SIZE)
 				{
 					contours.push_back(c);
-					FloodFill(img, start, USED);
+					if (debug)
+					{
+						imshow("a contour", img);
+						waitKey(0);
+					}
 				}
 				 
 				
@@ -297,20 +319,41 @@ bool FindContours(const cv::Mat& input, std::vector<Contour>& contours)
 	Find a single contour given a starting point in the image. 
 	This returns a contour using the chain-direction method, walking
 	around the black area searching relative to the last direction taken. 
+
+	Actually, revision: given that we are relying on RANSAC (if we weren't using this,
+	I'd be doing another method), we can just collect all points that are adjacent to a white pixel
 */
-// I know this is hack but it's the best way I could get it working
-const cv::Point dirs[Contour::NUM_DIRS] =
+
+/*
+int RepeatedPointsInContour(const Contour& c)
 {
-	Point(0,-1),
-	Point(1,-1),
-	Point(1,0),
-	Point(1,1),
-	Point(0,1),
-	Point(-1,1),
-	Point(-1,0),
-	Point(-1,-1)
-};
-Contour FindContour(const cv::Mat& input, const cv::Point& start)
+	int repeatedPoints = 0;
+
+	// Firstly, construct vector of points
+	vector<Point> points;
+	Point curPoint = c.start;
+	points.push_back(curPoint);
+	for (Contour::DIRECTION d : c.path)
+	{
+		curPoint += dirs[d];
+		points.push_back(curPoint);
+	}
+
+	for (int i = 0; i < points.size(); ++i)
+	{
+		Point& p = points[i];
+		for (int j = 0; j < points.size(); ++j)
+		{
+			if (p == points[j])
+			{
+				repeatedPoints++;
+			}
+		}
+	}
+
+	return repeatedPoints;
+}
+Contour FindContour(const Mat& input, const Point& start)
 {
 	Point curPoint = start;
 	Contour c;
@@ -320,7 +363,7 @@ Contour FindContour(const cv::Mat& input, const cv::Point& start)
 	{
 		// Search from up relative to the previous direction
 		auto l = c.path.size();
-		Contour::DIRECTION prevDir = !c.path.empty() ? c.path[l - 1] : Contour::UP;
+		Contour::DIRECTION prevDir = !c.path.empty() ? c.path[l - 1] : Contour::RIGHT;
 		for (int i = 0; i < Contour::NUM_DIRS; ++i)
 		{
 			int direction = c.path.empty() ? i : (i + prevDir) % Contour::NUM_DIRS;
@@ -331,8 +374,12 @@ Contour FindContour(const cv::Mat& input, const cv::Point& start)
 			}
 			//Point p = curPoint + dirs[direction];
 			auto pixel = input.at<uchar>(curPoint + dirs[direction]);
-			if (pixel == BLACK)
+			if (pixel == BLACK && PixelIsAdjacentToWhite(input, curPoint + dirs[direction]))
 			{
+				// Might need to enforce that every part of the contour has a white square
+				// 8-way adjacent to it
+				// This ensures that we always pick edge-squares
+
 				// WOO this is a contour point add this and break
 				// We always save the absolute direction, even
 				// though we check relative direction
@@ -358,6 +405,17 @@ Contour FindContour(const cv::Mat& input, const cv::Point& start)
 			break;
 		}
 
+		// Check that at least 50% of the contour is unique
+		// Only perform this check every 1000 points added though
+		if (c.path.size() % 1000 == 0)
+		{
+			if (RepeatedPointsInContour(c) > c.path.size() * 0.9)
+			{
+				c.path.clear();
+				break;
+			}
+		}
+
 		// The maximum length of the contour is technically every pixel in the image
 		// if it is longer we have an infinite loop
 		if (c.path.size() > input.cols*input.rows)
@@ -369,7 +427,7 @@ Contour FindContour(const cv::Mat& input, const cv::Point& start)
 	} while (curPoint != start);
 
 	return c;
-}
+}*/
 
 // Unit test for FindContour
 void TestFindContour()
@@ -391,14 +449,14 @@ void TestFindContour()
 
 	cout << test1 << endl;
 
-	Point start(1,1);
-	Contour c = FindContour(test1, start);
+	//Point start(1,1);
+	//Contour c = FindContour(test1, start);
 
-	assert(c.path.size() == 4);
-	assert(c.path[0] == Contour::RIGHT);
+	//assert(c.path.size() == 4);
+	/*assert(c.path[0] == Contour::RIGHT);
 	assert(c.path[1] == Contour::DOWN);
 	assert(c.path[2] == Contour::LEFT);
-	assert(c.path[3] == Contour::UP);
+	assert(c.path[3] == Contour::UP);*/
 
 }
 
@@ -408,12 +466,17 @@ void TestFindContour()
 	Given a point in an image, flood fill 8 way on the value of the
 	starting pixel. Fill with newVal
 */
-void FloodFill(Mat& img, const Point& start, int newVal)
+Contour FloodFillEdgePixels(Mat& img, const Point& start, int newVal)
 {
+	Contour c;
+	c.length = 0;
+	c.start = start;	
+	//c.path.push_back(start);
+
 	// sanity check
 	if (!IsInBounds(img.rows, img.cols, start))
 	{
-		return;
+		return c;
 	}
 
 	auto fillVal = img.at<uchar>(start);
@@ -438,6 +501,12 @@ void FloodFill(Mat& img, const Point& start, int newVal)
 			continue;
 		}
 
+		// If this point is an edge point, add it to the contour
+		if (PixelIsAdjacentToWhite(img, p))
+		{
+			c.path.push_back(p);
+		}
+
 		// fill this point
 		img.at<uchar>(p) = newVal;
 
@@ -459,6 +528,8 @@ void FloodFill(Mat& img, const Point& start, int newVal)
 			}
 		}
 	}
+
+	return c;
 }
 
 /*
@@ -475,13 +546,13 @@ void DrawContours(const cv::Mat& input, const std::vector<Contour>& contours)
 		Point curPoint = c.start;
 		for (auto& p : c.path)
 		{
-			curPoint += dirs[p];
-			circle(draw, curPoint, 2, (128, 128, 128), -1);
+			draw.at<uchar>(p) = 128;
+			//circle(draw, curPoint, 2, (128, 128, 128), -1);
 		}
 	}
-	namedWindow("contours");
+	namedWindow("contours", WINDOW_NORMAL);
 	imshow("contours", draw);
-	//waitKey(0);
+	waitKey(0);
 }
 
 /*
@@ -564,12 +635,9 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 
 	// Get all the points of the contour into a vector
 	vector<Point> points;
-	Point curPoint = c.start;
-	points.push_back(Point(curPoint.x, curPoint.y));
 	for (auto& p : c.path)
 	{
-		curPoint += dirs[p];
-		points.push_back(Point(curPoint.x, curPoint.y));
+		points.push_back(p);
 	}
 
 	// print each point fromt he contour you are currently describing?

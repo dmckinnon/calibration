@@ -10,17 +10,18 @@ struct Contour
 	static enum DIRECTION
 	{
 		UP, 
-		UPRIGHT, 
-		RIGHT,
-		DOWNRIGHT,
-		DOWN,
-		DOWNLEFT,
+		UPLEFT, 
 		LEFT,
-		UPLEFT,
+		DOWNLEFT,
+		DOWN,
+		DOWNRIGHT,
+		RIGHT,
+		UPRIGHT,
 		NUM_DIRS
 	};
 	int length;
-	std::vector<DIRECTION> path;
+	//std::vector<DIRECTION> path;
+	std::vector<cv::Point> path;
 	cv::Point start;
 };
 
@@ -56,18 +57,18 @@ bool GaussianThreshold(const cv::Mat& input, cv::Mat& output, int kernelSize, in
 bool Erode(const cv::Mat& input, cv::Mat& output, cv::Mat erosionKernel);
 
 // Find all contours in a binarised image
-bool FindContours(const cv::Mat& input, std::vector<Contour>& contours);
+bool FindContours(const cv::Mat& input, std::vector<Contour>& contours, bool debug=false);
 
 // DEBUG - draw all contours in an image
 void DrawContours(const cv::Mat& input, const std::vector<Contour>& contours);
 
 // Find a single contour given a starting point
-Contour FindContour(const cv::Mat& input, const cv::Point& start);
+//Contour FindContour(const cv::Mat& input, const cv::Point& start);
 void TestFindContour();
 
 // Floodfill part of an image, given a starting point, using its value
 // Changes all of that value, that touch it, to the second value
-void FloodFill(cv::Mat& img, const cv::Point& start, int newVal);
+Contour FloodFillEdgePixels(cv::Mat& img, const cv::Point& start, int newVal);
 
 // Find a quadrangle in a contour, or return false if it isn't confident
 bool FindQuad(const cv::Mat& img, const Contour& c, Quad& q);

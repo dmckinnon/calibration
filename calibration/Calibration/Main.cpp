@@ -52,9 +52,8 @@ using namespace Eigen;
 
 
 	Issues:
-	- Corners might not be linking /// Corners seem fine?
-	- Flood fill loop is broken
-	- Contour detection goes on way too long
+	- Maybe a bug in corner linking?
+	- Instead of contour detection, do flood fill such that 
 	- not enough quads found in photos
 	- Corner association fails ... ?
 
@@ -83,6 +82,7 @@ int main(int argc, char** argv)
 #ifdef DEBUG
 	std::string debugWindowName = "debug image";
 	namedWindow(debugWindowName);
+	
 #endif
 
 	/*******************************************/
@@ -90,18 +90,20 @@ int main(int argc, char** argv)
 
 	// Get ground truth checkerboard image
 	Mat checkerboard = imread(folder + "\\" + CHECKERBOARD_FILENAME, IMREAD_GRAYSCALE);
-	
-		// Display for debug
-
+#ifdef DEBUG
+	Mat temp = checkerboard.clone();
+#endif
 
 	vector<Quad> gtQuads;
-	if (!CheckerDetection(checkerboard, gtQuads))
+	cout << "Finding checkers in synthetic image" << endl;
+	if (!CheckerDetection(checkerboard, gtQuads, false))
 	{
 		return 1;
 	}
-	//checkerboard.release();
+	checkerboard.release();
 
 	// identity homography for gt quads to not transform them
+	cout << "Numbering synthetic checkers" << endl;
 	Matrix3f I;
 	I << 1, 0, 0,
 		 0, 1, 0,
@@ -114,10 +116,26 @@ int main(int argc, char** argv)
 	for (Quad q : gtQuads)
 	{
 		cout << "Quad number " << q.number << " has centre " << q.centre << endl;
+		for (int i = 0; i < 4; ++i)
+		{
+			Quad q2;
+			bool found = false;
+			for (Quad& qt : gtQuads)
+			{
+				if (qt.id == q.associatedCorners[i].first)
+				{
+					q2 = qt;
+					found = true;
+					break;
+				}
+			}
+			if (!found) continue;
+			cout << "\tcorner " << q.points[i] << " connects to quad " << q2.number << " at corner " << q.associatedCorners[i].second << endl;
+		}
 	}
 
 #ifdef DEBUG
-	Mat temp = checkerboard.clone();
+	
 
 	// Draw all the quad centres after the transformation
 	// on the image
@@ -147,10 +165,12 @@ int main(int argc, char** argv)
 	{
 		// Read in the image
 		Mat img = imread(folder + "\\" + to_string(image+1) + ".jpg", IMREAD_GRAYSCALE);
+		cout << "Reading image " << folder + "\\" + to_string(image + 1) + ".jpg" << endl;
 	
 		// Get the quads in the image
 		vector<Quad> quads;
-		if (!CheckerDetection(img, quads))
+		cout << "Finding checkers in captured image" << endl;
+		if (!CheckerDetection(img, quads, true))
 		{
 			cout << "Bad image for checkers in image " << image + 1 << endl;
 			continue;
@@ -163,6 +183,7 @@ int main(int argc, char** argv)
 		cout << "Found " << quads.size() << " quads" << endl;
 
 		// set up matches and create homography
+		cout << "Finding homography for captured checkers" << endl;
 		vector<pair<Point, Point>> matches = MatchCornersForHomography(gtQuads, quads);
 		Matrix3f H;
 		if (!GetHomographyFromMatches(matches, H))
@@ -172,10 +193,12 @@ int main(int argc, char** argv)
 		}
 
 		// Associate all quads from these quads for the purposes of optimisation
+		cout << "Transforming all synthetic checkers" << endl;
 		TransformAndNumberQuads(H, quads);
 
 		// Decompose into K matrix and extrinsics
 		Matrix3f K, T;
+		cout << "Computing extrinsics and intrinsics" << endl;
 		if (!ComputeIntrinsicsAndExtrinsicFromHomography(H, K, T))
 		{
 			cout << "Failed to compute intrinsics for image " << image + 1 << endl;

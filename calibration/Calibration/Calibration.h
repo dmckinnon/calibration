@@ -8,7 +8,7 @@
 #include "Features.h"
 #include "Image.h"
 
-#define MAX_ERODE_ITERATIONS 10
+#define MAX_ERODE_ITERATIONS 4 // 10
 
 // structure for the calibration of a camera
 struct Calibration
@@ -25,7 +25,7 @@ struct Calibration
 /* Calibration functions */
 bool EnumerateCheckerboardCorners(std::vector<Feature>& features, cv::Point& size, const bool gt);
 
-bool CheckerDetection(const cv::Mat& checkerboard, std::vector<Quad>& quads);
+bool CheckerDetection(const cv::Mat& checkerboard, std::vector<Quad>& quads, bool debug);
 
 bool ComputeIntrinsicsAndExtrinsicFromHomography(const Eigen::Matrix3f& H, Eigen::Matrix3f& K, Eigen::Matrix3f& T);
 
