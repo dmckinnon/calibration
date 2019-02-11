@@ -426,7 +426,7 @@ vector<pair<Point, Point>> MatchCornersForHomography(vector<Quad>& gtQuads, vect
 	index = 0;
 	for (int i = 0; i < 4; ++i)
 	{
-		if (quads[connectedQuad.associatedCorners[i].second].numLinkedCorners == 2)
+		if (connectedQuad.associatedCorners[i].second >= 0 && quads[connectedQuad.associatedCorners[i].second].numLinkedCorners == 2)
 		{
 			branches[index] = quads[connectedQuad.associatedCorners[i].second];
 			index++;

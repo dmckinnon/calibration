@@ -15,7 +15,7 @@ using namespace std;
 #define GRAD_THRESHOLD 10
 #define MIN_LINE_LENGTH 10
 
-#define RANSAC_LINE_ERROR 1
+#define RANSAC_LINE_ERROR 1.5f
 
 #define LONG_SIDE 9
 #define SHORT_SIDE 7
@@ -604,12 +604,12 @@ Point GetIntersectionOfLines(const LineSegment& l1, const LineSegment& l2)
 	}
 	else if (a1 == 0)
 	{
-		y = -c1 / a1;
+		y = -c1 / b1;
 		x = (-b2/a2)*y + (-c2/a2);
 	}
 	else if (a2 == 0)
 	{
-		y = -c2 / a2;
+		y = -c2 / b2;
 		x = (-b1 / a1)*y + (-c1 / a1);
 	}
 	else {
@@ -650,12 +650,11 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 		// Search among points for a line with RANSAC
 		vector<Point> inliers;
 		pair<Point, Point> seedPoints;
-		inliers = FindLineInPointsRANSAC(points, points.size()/5, RANSAC_LINE_ERROR, 100, seedPoints);
+		inliers = FindLineInPointsRANSAC(points, minLineSize, RANSAC_LINE_ERROR, 200, seedPoints);
 
 		if (!inliers.empty())
 		{
 			// remove inliers from points
-			
 			for (auto p : inliers)
 			{
 				int i = 0;
@@ -682,6 +681,8 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 			break;
 		}
 	}
+
+	// if there are more than four lines, do we try to combine them?
 
 	// Check that there are four lines
 	if (lines.size() == 4)

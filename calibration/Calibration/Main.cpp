@@ -52,10 +52,8 @@ using namespace Eigen;
 
 
 	Issues:
-	- Maybe a bug in corner linking?
-	- Instead of contour detection, do flood fill such that 
-	- not enough quads found in photos
-	- Corner association fails ... ?
+	- Association fails for captured quads
+	- Quad matching fails on captured quads
 
 	TODO:
 	- refinement

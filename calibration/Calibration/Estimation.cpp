@@ -623,7 +623,7 @@ vector<Point> FindLineInPointsRANSAC(const vector<Point>& points, const int inli
 
 	// Over the given number of iterations
 	const int length = points.size();
-	if (length == 0 || length == 1)
+	if (length < 2)
 	{
 		return inliers;
 	}
@@ -641,14 +641,12 @@ vector<Point> FindLineInPointsRANSAC(const vector<Point>& points, const int inli
 		seedPoints.first = points[i1];
 		seedPoints.second = points[i2];
 
-		//cout << "Searching on points " << points[i1] << " and " << points[i2];
-
 		// Check all other points. If they are within maxError of the line,
 		// then add them to the inlier set
 		for (auto& p : points)
 		{
 			float d = distToLine(p, seedPoints);
-			if (d < maxError)
+			if (d <= maxError)
 			{
 				inliers.push_back(p);
 			}
