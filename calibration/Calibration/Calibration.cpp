@@ -128,10 +128,11 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 		{
 			for (const Quad& q1 : quadsThisIteration)
 			{
-				float diagLength = GetLongestDiagonal(q1) / 4.f;
 				bool found = false;
+				Quad q;
 				for (Quad& q2 : quads)
 				{
+					float diagLength = GetLongestDiagonal(q2) / 4.f;
 					if (DistBetweenPoints(q1.centre, q2.centre) < diagLength)
 					{
 						// This quad already exists. No need to search further
@@ -287,7 +288,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 #endif
 
 	// Make sure at least 90% of the desired number of quads have been found
-	if (quads.size() < 28)
+	if (quads.size() < 24)
 	{
 		return false;
 

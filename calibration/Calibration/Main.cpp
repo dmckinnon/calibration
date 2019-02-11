@@ -54,6 +54,7 @@ using namespace Eigen;
 	Issues:
 	- Association fails for captured quads
 	- Quad matching fails on captured quads
+	- Quad detection fails on later erosions for captured quads
 
 	TODO:
 	- refinement
@@ -179,6 +180,39 @@ int main(int argc, char** argv)
 			continue;
 		}
 		cout << "Found " << quads.size() << " quads" << endl;
+
+		// DEBUG
+		// COnfirm that all the quads are good
+		Mat temp2 = img.clone();
+		for (Quad q : quads)
+		{
+			cout << "Quad id " << q.id << " has centre " << q.centre << endl;
+			for (int i = 0; i < 4; ++i)
+			{
+				Quad q2;
+				bool found = false;
+				for (Quad& qt : gtQuads)
+				{
+					if (qt.id == q.associatedCorners[i].first)
+					{
+						q2 = qt;
+						found = true;
+						break;
+					}
+				}
+				if (!found) continue;
+				cout << "\tcorner " << q.points[i] << " connects to quad " << q2.number << " at corner " << q.associatedCorners[i].second << endl;
+			}
+
+			putText(temp2, std::to_string(q.id), q.centre,
+				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(128, 128, 128), 1, CV_AA);
+		}
+		// Debug display
+		imshow(debugWindowName, temp2);
+		waitKey(0);
+
+
+	
 
 		// set up matches and create homography
 		cout << "Finding homography for captured checkers" << endl;
