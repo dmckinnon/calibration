@@ -11,7 +11,7 @@ using namespace Eigen;
 #define RECT true
 #define CROSS false
 
-#define DEBUG
+//#define DEBUG
 
 /*
 	Align checkerboard.
@@ -130,11 +130,19 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 			{
 				bool found = false;
 				Quad q;
-				for (Quad& q2 : quads)
+				for (const Quad& q2 : quads)
 				{
 					float diagLength = GetLongestDiagonal(q2) / 4.f;
 					if (DistBetweenPoints(q1.centre, q2.centre) < diagLength)
 					{
+						Mat newErode = erode.clone();
+						Mat orig = img.clone();
+						if (debug)
+						{
+							DrawQuad(orig, q2);
+							DrawQuad(newErode, q1);
+						}
+
 						// This quad already exists. No need to search further
 						found = true;
 						break;
@@ -145,6 +153,8 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 				{
 					// This quad wasn't found in previous iterations. Add it
 					quads.push_back(q1);
+					Mat newErode = erode.clone();
+					if (debug) DrawQuad(newErode, q1);
 				}
 			}
 		}

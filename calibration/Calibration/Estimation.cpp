@@ -641,6 +641,10 @@ vector<Point> FindLineInPointsRANSAC(const vector<Point>& points, const int inli
 		seedPoints.first = points[i1];
 		seedPoints.second = points[i2];
 
+		// Enforce a minimum distance between these points to avoid
+		// minute errors turning into large errors with angles in small lines
+		//???
+
 		// Check all other points. If they are within maxError of the line,
 		// then add them to the inlier set
 		for (auto& p : points)

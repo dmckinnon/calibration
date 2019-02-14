@@ -52,9 +52,8 @@ using namespace Eigen;
 
 
 	Issues:
-	- Association fails for captured quads
-	- Quad matching fails on captured quads
-	- Quad detection fails on later erosions for captured quads
+	- Probably infinite loop in Corner quad finding
+	- Also it doesn't account for only finding some corners
 
 	TODO:
 	- refinement
@@ -169,7 +168,7 @@ int main(int argc, char** argv)
 		// Get the quads in the image
 		vector<Quad> quads;
 		cout << "Finding checkers in captured image" << endl;
-		if (!CheckerDetection(img, quads, true))
+		if (!CheckerDetection(img, quads, false))
 		{
 			cout << "Bad image for checkers in image " << image + 1 << endl;
 			continue;

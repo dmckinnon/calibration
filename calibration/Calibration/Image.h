@@ -79,6 +79,9 @@ float DistBetweenPoints(const cv::Point& p1, const cv::Point& p2);
 // Distance from point to line, signed
 int PointDistToLineSigned(const cv::Point& p, const cv::Point& p1, const cv::Point& p2);
 
+//  Intersection of two lines
+cv::Point GetIntersectionOfLines(const LineSegment& l1, const LineSegment& l2);
+
 // Does a point lie within the quad defined by two other points?
 bool DoesPointLieWithinQuadOfTwoCentres(const cv::Point& p, const Quad& q1, const Quad& q2);
 

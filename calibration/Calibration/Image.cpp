@@ -16,6 +16,7 @@ using namespace std;
 #define MIN_LINE_LENGTH 10
 
 #define RANSAC_LINE_ERROR 1.5f
+#define CORNER_CONTOUR_EPSILON 5.f
 
 #define LONG_SIDE 9
 #define SHORT_SIDE 7
@@ -556,6 +557,41 @@ void DrawContours(const cv::Mat& input, const std::vector<Contour>& contours)
 }
 
 /*
+	DEBUG
+	Draw a set of lines in the image as long as they go
+*/
+void DrawLine(const cv::Mat& input, const LineSegment l)
+{
+	Mat draw = input.clone();
+
+	LineSegment topEdge{ Point(0,0), Point(input.cols-1, 0) };
+	LineSegment rightEdge{ Point(input.cols-1, 0), Point(input.cols-1, input.rows-1) };
+	LineSegment bottomEdge{ Point(0,input.rows-1), Point(input.cols-1, input.rows-1) };
+	LineSegment leftEdge{ Point(0,0), Point(0, input.rows-1) };
+
+	// extend line out to meet image edge
+	// Get intersection of line with each image edge
+	// Then find the closest two points, and those frame the line we want to draw
+	auto pTop = GetIntersectionOfLines(l, topEdge);
+	auto pRight = GetIntersectionOfLines(l, rightEdge);
+	auto pBottom = GetIntersectionOfLines(l, bottomEdge);
+	auto pLeft = GetIntersectionOfLines(l, leftEdge);
+
+	// Some of these points will not be in the frame, and some will
+	if (IsInBounds(input.rows, input.cols, pTop))
+		line(draw, pTop, l.p1, (128, 128, 128), 1);
+	if (IsInBounds(input.rows, input.cols, pRight))
+		line(draw, pRight, l.p1, (128, 128, 128), 1);
+	if (IsInBounds(input.rows, input.cols, pLeft))
+		line(draw, pLeft, l.p1, (128, 128, 128), 1);
+	if (IsInBounds(input.rows, input.cols, pBottom))
+		line(draw, pBottom, l.p1, (128, 128, 128), 1);
+	namedWindow("lines", WINDOW_NORMAL);
+	imshow("lines", draw);
+	waitKey(0);
+}
+
+/*
 	Find quadrangles in an image
 
 	This searches through contours for "straight line sections" - 
@@ -621,6 +657,25 @@ Point GetIntersectionOfLines(const LineSegment& l1, const LineSegment& l2)
 
 	return Point((int)x, (int)y);
 }
+bool CheckCornerValidity(const Contour& c, const Point& p1)
+{
+	bool withinBounds = false;
+	for (const auto& p : c.path)
+	{
+		if (DistBetweenPoints(p1, p) < CORNER_CONTOUR_EPSILON)
+		{
+			withinBounds = true;
+			break;
+		}
+	}
+
+	// Corner is too far from the contour, this isn't good
+	if (!withinBounds)
+	{
+		return false;
+	}
+	return true;
+}
 // Actual function
 bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 {
@@ -682,7 +737,25 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 		}
 	}
 
-	// if there are more than four lines, do we try to combine them?
+	// Find the centroid of the contour as a heuristic for the quad centre
+	// And the two furthest points for diagonal width
+	Point centroid(0,0);
+	float size = 0;
+	for (auto& p : c.path)
+	{
+		centroid += p;
+		for (auto& q : c.path)
+		{
+			float d = DistBetweenPoints(p, q);
+			if (d > size)
+			{
+				size = d;
+			}
+		}
+	}
+	centroid.x /= c.path.size();
+	centroid.y /= c.path.size();
+
 
 	// Check that there are four lines
 	if (lines.size() == 4)
@@ -705,7 +778,7 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 		Point corner = GetIntersectionOfLines(lines[0], lines[1]);
 		LineSegment nextLine = lines[1];
 		LineSegment nextOtherLine = lines[2];
-		if (corner.x >= 0 && corner.x < img.size().width && corner.y >= 0 && corner.y < img.size().height)
+		if (IsInBounds(img.rows, img.cols, corner) && DistBetweenPoints(corner, centroid) < size)
 		{
 			q.points[0] = corner;
 			centreX += corner.x;
@@ -715,18 +788,17 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 			nextLine = lines[2];
 			nextOtherLine = lines[1];
 			Point corner = GetIntersectionOfLines(lines[0], lines[2]);
-			if (corner.x >= 0 && corner.x < img.size().width && corner.y >= 0 && corner.y < img.size().height)
+			if (IsInBounds(img.rows, img.cols, corner) && DistBetweenPoints(corner, centroid) < size)
 			{
 				q.points[0] = corner;
 				centreX += corner.x;
 				centreY += corner.y;
 			}
-			// Don't wanna think about the else case
 		}
 		// Next corner is between whatever just didn't work, and the one that did
 		corner = GetIntersectionOfLines(nextLine, nextOtherLine);
 		LineSegment finalLine = lines[3];
-		if (corner.x >= 0 && corner.x < img.size().width && corner.y >= 0 && corner.y < img.size().height)
+		if (IsInBounds(img.rows, img.cols, corner) && DistBetweenPoints(corner, centroid) < size)
 		{
 			q.points[1] = corner;
 			centreX += corner.x;
@@ -737,7 +809,7 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 			Point corner = GetIntersectionOfLines(nextLine, lines[3]);
 			finalLine = nextOtherLine;
 			nextOtherLine = lines[3];
-			if (corner.x >= 0 && corner.x < img.size().width && corner.y >= 0 && corner.y < img.size().height)
+			if (IsInBounds(img.rows, img.cols, corner) && DistBetweenPoints(corner, centroid) < size)
 			{
 				q.points[1] = corner;
 				centreX += corner.x;
@@ -746,7 +818,7 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 		}
 		// Next corner is between what we just connected to, and the final line. This has to be a corner
 		corner = GetIntersectionOfLines(nextOtherLine, finalLine);
-		if (corner.x >= 0 && corner.x < img.size().width && corner.y >= 0 && corner.y < img.size().height)
+		if (IsInBounds(img.rows, img.cols, corner) && DistBetweenPoints(corner, centroid) < size)
 		{
 			q.points[2] = corner;
 			centreX += corner.x;
@@ -754,44 +826,30 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 		}
 		// And last but not least, final line back to line 0
 		corner = GetIntersectionOfLines(finalLine, lines[0]);
-		if (corner.x >= 0 && corner.x < img.size().width && corner.y >= 0 && corner.y < img.size().height)
+		if (IsInBounds(img.rows, img.cols, corner) && DistBetweenPoints(corner, centroid) < size)
 		{
 			q.points[3] = corner;
 			centreX += corner.x;
 			centreY += corner.y;
+
+			if (!CheckCornerValidity(c, corner))
+			{
+				DrawLine(img, lines[0]);
+				DrawLine(img, finalLine);
+			}
 		}
 
-		// So now the corner indices go around the quad. Adjacent indices means adjacent corners
-
-
-		/*for (int i = 0; i < lines.size(); ++i)
-		{
-			LineSegment l1 = lines[i];
-			for (int j = i + 1; j < lines.size(); ++j)
-			{
-				LineSegment l2 = lines[j];
-				Point corner = GetIntersectionOfLines(l1, l2);
-				if (corner.x >= 0 && corner.x < img.size().width && corner.y >= 0 && corner.y < img.size().height)
-				{
-					q.points[cornerIndex++] = corner;
-					centreX += corner.x;
-					centreY += corner.y;
-				}
-			}
-		}*/
-
-		// Sanity check that we got all four corners
-		// by confirming none of them are the same
+		// Better confirmation - confirm that for each corner there exists a point
+		// on the contour such that each corner is within some small epsilon
+		// of this point
+		// This will at least catch those cases
+		// The bound is pretty loose
 		for (int i = 0; i < 4; ++i)
 		{
 			auto& c1 = q.points[i];
-			for (int j = i+1; j < 4; ++j)
+			if (!CheckCornerValidity(c, c1))
 			{
-				auto& c2 = q.points[j];
-				if (c1.x == c2.x && c1.y == c2.y)
-				{
-					return false;
-				}
+				return false;
 			}
 		}
 
@@ -1005,5 +1063,5 @@ void DrawQuad(const cv::Mat& input, const Quad& q)
 	}
 	namedWindow("quad");
 	imshow("quad", draw);
-	//waitKey(0);
+	waitKey(0);
 }
