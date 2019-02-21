@@ -17,7 +17,7 @@ using namespace Eigen;
 
 #define CHECKERBOARD_FILENAME "checkerboard.jpg"
 
-#define DEBUG
+//#define DEBUG
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -52,8 +52,8 @@ using namespace Eigen;
 
 
 	Issues:
-	- Probably infinite loop in Corner quad finding
-	- Also it doesn't account for only finding some corners
+	- Homography is failing
+	- Corner linking is failing, leading to homography failing. 
 
 	TODO:
 	- refinement
@@ -207,7 +207,7 @@ int main(int argc, char** argv)
 				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(128, 128, 128), 1, CV_AA);
 		}
 		// Debug display
-		imshow(debugWindowName, temp2);
+		imshow("debug", temp2);
 		waitKey(0);
 
 
@@ -215,17 +215,35 @@ int main(int argc, char** argv)
 
 		// set up matches and create homography
 		cout << "Finding homography for captured checkers" << endl;
-		vector<pair<Point, Point>> matches = MatchCornersForHomography(gtQuads, quads);
 		Matrix3f H;
-		if (!GetHomographyFromMatches(matches, H))
+		if (!GetHomographyAndMatchQuads(H, img, gtQuads, quads))
 		{
 			cout << "Failed to find homography for image " << image + 1 << endl;
 			continue;
 		}
 
-		// Associate all quads from these quads for the purposes of optimisation
-		cout << "Transforming all synthetic checkers" << endl;
-		TransformAndNumberQuads(H, quads);
+		// DEBUG
+		// Draw the homographied quads
+		Mat temp3 = img.clone();
+		for (Quad q : quads)
+		{
+			Vector3f size(L2norm(q.points[0] - q.points[1]), 0, 1);
+			Vector3f Hsize = H * size;
+			Hsize /= Hsize(2);
+			float s = Hsize(0);
+
+			Vector3f x(q.centre.x, q.centre.y, 1);
+			Vector3f Hx = H * x;
+			Hx / Hx(2);
+			auto centre = Point(Hx(0), Hx(1));
+
+
+
+			circle(temp3, centre, s/2, (128, 128, 128), -1);
+		}
+		// Debug display
+		imshow("debug", temp3);
+		waitKey(0);
 
 		// Decompose into K matrix and extrinsics
 		Matrix3f K, T;
@@ -233,6 +251,7 @@ int main(int argc, char** argv)
 		if (!ComputeIntrinsicsAndExtrinsicFromHomography(H, K, T))
 		{
 			cout << "Failed to compute intrinsics for image " << image + 1 << endl;
+			continue;
 		}  
 
 		// number for debug

@@ -1,4 +1,5 @@
 #include "Calibration.h"
+#include "Estimation.h"
 #include "Image.h"
 #include <iostream>
 #include <algorithm>
@@ -363,7 +364,38 @@ int FindCornerFromEdgeQuad(const Quad& root, const Quad& branch, vector<Quad>& q
 /*
 	Match the four extreme corners for the purposes of a homography
 */
-vector<pair<Point, Point>> MatchCornersForHomography(vector<Quad>& gtQuads, vector<Quad>& quads)
+// Helper
+float GetReprojectionError(const vector<Quad>& gtQuads, const vector<Quad>& quads, const Matrix3f& H)
+{
+
+	// Find the closest quad in gt set and get error
+	float e = 0;
+	for (Quad q : quads)
+	{
+		Vector3f x(q.centre.x, q.centre.y, 1);
+		Vector3f Hx = H * x;
+		Hx / Hx(2);
+		q.centre = Point(Hx(0), Hx(1));
+
+		Quad closest;
+		float minDist = 100000;
+		for (Quad q2 : gtQuads)
+		{
+			auto d = DistBetweenPoints(q2.centre, q.centre);
+			if (d < minDist)
+			{
+				minDist = d;
+				closest = q2;
+			}
+		}
+
+		e += L2norm(closest.centre - q.centre);
+	}
+
+	return e;
+}
+// Actual Function
+bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQuads, vector<Quad>& quads)
 {
 	vector<pair<Point, Point>> matches;
 
@@ -421,106 +453,121 @@ vector<pair<Point, Point>> MatchCornersForHomography(vector<Quad>& gtQuads, vect
 		}
 	}
 
-	// Pick the first, search along it
-	// Search along both branches of the connected quad
-	int cornerIndex = 0;
+	Mat temp2 = img.clone();
 	for (int i = 0; i < 4; ++i)
 	{
-		if (corners[0].associatedCorners[i].first != -1)
-		{
-			cornerIndex = i;
-			break;
-		}
-	}
-	Quad connectedQuad = quads[corners[0].associatedCorners[cornerIndex].second];
-	Quad branches[2];
-	index = 0;
-	for (int i = 0; i < 4; ++i)
-	{
-		if (connectedQuad.associatedCorners[i].second >= 0 && quads[connectedQuad.associatedCorners[i].second].numLinkedCorners == 2)
-		{
-			branches[index] = quads[connectedQuad.associatedCorners[i].second];
-			index++;
-			if (index == 2) break;
-		}
-	}
-	// Now search down each branch
-	Quad corner1, corner2;
-	int stepsToCorner1 = FindCornerFromEdgeQuad(connectedQuad, branches[0], quads, corner1) + 2;
-	int stepsToCorner2 = FindCornerFromEdgeQuad(connectedQuad, branches[1], quads, corner2) + 2;
-
-	Quad closeCorner = stepsToCorner1 > stepsToCorner2 ? corner2 : corner1;
-	Quad farCorner = stepsToCorner1 > stepsToCorner2 ? corner1 : corner2;
-
-	// if the original corner is higher than its closest neighbouring corner
-	// We'll say this is the top left. Otherwise, it's the bottom right
-	if (corners[0].centre.y < closeCorner.centre.y)
-	{
-		corners[0].number = 1;
-		matches.push_back(pair<Point, Point>(topleft.centre, corners[0].centre));
 		
-		for (int i = 1; i < 4; ++i)
+
+		circle(temp2, corners[i].centre, 20, (128, 128, 128), -1);
+	}
+	// Debug display
+	imshow("corners", temp2);
+	waitKey(0);
+
+	// New, easier idea:
+	// Try every combination of fitting the gt corners to the captured corners
+	// if we have fewer than four, then either only use two corner checkers, but use four of their points
+	// or find a fourth checker by using a connecting one, and dsearching for a captured checker with 3 connections
+	//
+	// Pick a combination - create a homography. 
+	// If homography, test it
+	// warp all corners, and find the reprojection error
+	// Pick the H with the smallest reprojection error
+
+	if (index == 4)
+	{
+		// We have all four corners.
+		// Test all 24 possibilities for minimal reprojection error
+		int indices[] = { 0,1,2,3 };
+
+		// Iterate over all permutations
+		float minError = 100000000;
+		int perm[] = { 0,1,2,3 };
+		Matrix3f homography;
+		do {
+			// the gt corners 0,1,2,3 are associated with indices[0],[1],[2],[3] of captured corners
+			vector<pair<Point, Point>> matches;
+			matches.push_back(pair<Point, Point>(corners[indices[0]].centre, topleft.centre));
+			matches.push_back(pair<Point, Point>(corners[indices[1]].centre, topright.centre));
+			matches.push_back(pair<Point, Point>(corners[indices[2]].centre, bottomleft.centre));
+			matches.push_back(pair<Point, Point>(corners[indices[3]].centre, bottomright.centre));
+
+			Matrix3f h;
+			if (!GetHomographyFromMatches(matches, h))
+			{
+				// This permutation wasn't good enough
+				continue;
+			}
+
+			// DEBUG
+			// Draw the homographied quads
+			Mat temp3 = img.clone();
+			for (Quad q : quads)
+			{
+				Vector3f size(L2norm(q.points[0] - q.points[1]), 0, 1);
+				Vector3f Hsize = h * size;
+				Hsize /= Hsize(2);
+				float s = Hsize(0);
+				s = s < 0 ? 2 : s;
+
+				Vector3f x(q.centre.x, q.centre.y, 1);
+				Vector3f Hx = h * x;
+				Hx / Hx(2);
+				auto centre = Point(Hx(0), Hx(1));
+
+
+
+				circle(temp3, centre, s / 2, (128, 128, 128), -1);
+			} 
+			// Debug display
+			imshow("permutation", temp3);
+			waitKey(0);
+
+
+			// Transform all captured quads with H
+
+			float e = GetReprojectionError(gtQuads, quads, h);
+  			if (e < minError)
+			{
+				minError = e;
+				perm[0] = indices[0];
+				perm[1] = indices[1];
+				perm[2] = indices[2];
+				perm[3] = indices[3];
+				homography = h;
+			}
+
+		} while (std::next_permutation(indices, indices + 4));
+
+		if (minError == 100000000)
 		{
-			// This means that the close corner is the bottom left
-			if (corners[i].centre == closeCorner.centre)
-			{
-				corners[i].number = 28;
-				matches.push_back(pair<Point, Point>(bottomleft.centre, corners[i].centre));
-				break;
-			}
-
-			// far corner is the top right
-			else if (corners[i].centre == farCorner.centre)
-			{
-				corners[i].number = 5;
-				matches.push_back(pair<Point, Point>(topright.centre, corners[i].centre));
-				break;
-			}
-
-			// and the final corner is the bottom right
-			else
-			{
-				corners[i].number = 32;
-				matches.push_back(pair<Point, Point>(bottomright.centre, corners[i].centre));
-				break;
-			}
+			// Nothing worked. Just bail
+			return false;
 		}
+
+		cout << "The minimum error was " << minError << endl;
+
+		H = homography;
+	}
+	else if (index == 3 || index == 2)
+	{
+		// Just use two. It's simplest
+		// Or, for now, could just throw it away?
+
+		// For simplicity, throw it away
+		// we'll see how well we do on other images
+		return false;
 	}
 	else
 	{
-		// Now under this case, corner[0] is the bottom right
-		corners[0].number = 32;
-		matches.push_back(pair<Point, Point>(bottomright.centre, corners[0].centre));
-
-		for (int i = 1; i < 4; ++i)
-		{
-			// This means that the close corner is the top right
-			if (corners[i].centre == closeCorner.centre)
-			{
-				corners[i].number = 5;
-				matches.push_back(pair<Point, Point>(topright.centre, corners[i].centre));
-				break;
-			}
-
-			// far corner is the bottom left
-			else if (corners[i].centre == farCorner.centre)
-			{
-				corners[i].number = 28;
-				matches.push_back(pair<Point, Point>(bottomleft.centre, corners[i].centre));
-				break;
-			}
-
-			// and the final corner is the top left
-			else
-			{
-				corners[i].number = 1;
-				matches.push_back(pair<Point, Point>(topleft.centre, corners[i].centre));
-				break;
-			}
-		}
+		// This image was clearly pretty bad. Throw it away
+		return false;
 	}
 
-	return matches;
+	// Now number quads
+	TransformAndNumberQuads(H, quads);
+
+	return true;
 }
 
 /*
@@ -551,6 +598,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Third, take the topmost quad. Find everything in its row.
 	// order from left to right. Number them, remove them
 	int quadNumber = 1;
+	int iteration = 0;
 	while (!localQuads.empty())
 	{
 		if (quadNumber > 200)
@@ -603,6 +651,11 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 
 			// Remove the quad
 			localQuads.erase(localQuads.begin() + i);
+
+			if (localQuads.empty())
+			{
+				break;
+			}
 		}
 
 		// Order quads
@@ -615,11 +668,38 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 			quadNumber++;
 		}
 
+		// What if a row is too small? Gotta account
+		switch (iteration)
+		{
+		case 0: 
+			quadNumber = quadNumber < 6 ? 6 : quadNumber;
+			break;
+		case 1:
+			quadNumber = quadNumber < 10 ? 10 : quadNumber;
+			break;
+		case 2:
+			quadNumber = quadNumber < 15 ? 15 : quadNumber;
+			break;
+		case 3:
+			quadNumber = quadNumber < 19 ? 19 : quadNumber;
+			break;
+		case 4:
+			quadNumber = quadNumber < 24 ? 24 : quadNumber;
+			break;
+		case 5:
+			quadNumber = quadNumber < 29 ? 29 : quadNumber;
+			break;
+		default:
+			break;
+		}
+
 		// Add to ordered list
 		for (Quad& q : thisRow)
 		{
 			orderedQuads.push_back(q);
 		}
+
+		iteration++;
 	}
 
 	// Repeat

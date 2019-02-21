@@ -22,6 +22,8 @@ struct Calibration
 	// And any other camera parameters
 };
 
+float L2norm(cv::Point a);
+
 /* Calibration functions */
 bool EnumerateCheckerboardCorners(std::vector<Feature>& features, cv::Point& size, const bool gt);
 
@@ -29,6 +31,6 @@ bool CheckerDetection(const cv::Mat& checkerboard, std::vector<Quad>& quads, boo
 
 bool ComputeIntrinsicsAndExtrinsicFromHomography(const Eigen::Matrix3f& H, Eigen::Matrix3f& K, Eigen::Matrix3f& T);
 
-std::vector<std::pair<cv::Point, cv::Point>> MatchCornersForHomography(std::vector<Quad>& gtQuads, std::vector<Quad>& quads);
+bool GetHomographyAndMatchQuads(Eigen::Matrix3f& H, const cv::Mat& img, std::vector<Quad>& gtQuads, std::vector<Quad>& quads);
 
 void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads);
