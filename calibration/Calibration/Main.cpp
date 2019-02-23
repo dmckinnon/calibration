@@ -52,8 +52,8 @@ using namespace Eigen;
 
 
 	Issues:
-	- Homography is failing
-	- Corner linking is failing, leading to homography failing. 
+	- Cannot get a good homography
+	- With a mildly inaccurate homography ... how do we number them correctly?
 
 	TODO:
 	- refinement
@@ -98,7 +98,7 @@ int main(int argc, char** argv)
 	{
 		return 1;
 	}
-	checkerboard.release();
+	//checkerboard.release();
 
 	// identity homography for gt quads to not transform them
 	cout << "Numbering synthetic checkers" << endl;
@@ -216,7 +216,7 @@ int main(int argc, char** argv)
 		// set up matches and create homography
 		cout << "Finding homography for captured checkers" << endl;
 		Matrix3f H;
-		if (!GetHomographyAndMatchQuads(H, img, gtQuads, quads))
+		if (!GetHomographyAndMatchQuads(H, img, checkerboard, gtQuads, quads))
 		{
 			cout << "Failed to find homography for image " << image + 1 << endl;
 			continue;
@@ -224,25 +224,16 @@ int main(int argc, char** argv)
 
 		// DEBUG
 		// Draw the homographied quads
-		Mat temp3 = img.clone();
+		Mat temp3 = checkerboard.clone();
 		for (Quad q : quads)
 		{
-			Vector3f size(L2norm(q.points[0] - q.points[1]), 0, 1);
-			Vector3f Hsize = H * size;
-			Hsize /= Hsize(2);
-			float s = Hsize(0);
+			putText(temp3, std::to_string(q.number), q.centre,
+				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
 
-			Vector3f x(q.centre.x, q.centre.y, 1);
-			Vector3f Hx = H * x;
-			Hx / Hx(2);
-			auto centre = Point(Hx(0), Hx(1));
-
-
-
-			circle(temp3, centre, s/2, (128, 128, 128), -1);
+			circle(temp3, q.centre, 20, (128, 128, 128), 2);
 		}
 		// Debug display
-		imshow("debug", temp3);
+		imshow("Numbered and Hd", temp3);
 		waitKey(0);
 
 		// Decompose into K matrix and extrinsics
@@ -267,7 +258,7 @@ int main(int argc, char** argv)
 		calibrationEstimates.push_back(c);
 
 		// free the memory
-		img.release();
+ 		img.release();
 	}
 
 	// We need a minimum number of estimates for this to work

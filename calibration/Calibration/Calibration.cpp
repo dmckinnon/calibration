@@ -13,7 +13,7 @@ using namespace Eigen;
 #define CROSS false
 
 //#define DEBUG
-#define DEBUG_CORNERS
+//#define DEBUG_CORNERS
 
 /*
 	Align checkerboard.
@@ -466,37 +466,29 @@ int FindCornerFromEdgeQuad(const Quad& root, const Quad& branch, vector<Quad>& q
 	Match the four extreme corners for the purposes of a homography
 */
 // Helper
-float GetReprojectionError(const vector<Quad>& gtQuads, const vector<Quad>& quads, const Matrix3f& H)
+// just do reprojection error from the corner centres
+float GetReprojectionError(const Quad gtCorners[], const Quad corners[], int indices[], const Matrix3f& H)
 {
 
 	// Find the closest quad in gt set and get error
 	float e = 0;
-	for (Quad q : quads)
+	for (int i = 0; i < 4; ++i)
 	{
-		Vector3f x(q.centre.x, q.centre.y, 1);
+		Quad q1 = gtCorners[i];
+		Quad q2 = corners[indices[i]];
+
+		Vector3f x(q2.centre.x, q2.centre.y, 1);
 		Vector3f Hx = H * x;
 		Hx / Hx(2);
-		q.centre = Point(Hx(0), Hx(1));
+		auto newQ2centre = Point(Hx(0), Hx(1));
 
-		Quad closest;
-		float minDist = 100000;
-		for (Quad q2 : gtQuads)
-		{
-			auto d = DistBetweenPoints(q2.centre, q.centre);
-			if (d < minDist)
-			{
-				minDist = d;
-				closest = q2;
-			}
-		}
-
-		e += L2norm(closest.centre - q.centre);
+		e += L2norm(q1.centre - newQ2centre);
 	}
 
 	return e;
 }
 // Actual Function
-bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQuads, vector<Quad>& quads)
+bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& checkerboard, vector<Quad>& gtQuads, vector<Quad>& quads)
 {
 	vector<pair<Point, Point>> matches;
 
@@ -529,6 +521,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQua
 			bottomright = q;
 		}
 	}
+	Quad gtCorners[4] = {topleft, topright, bottomleft, bottomright};
 
 	// reiterate, just in case it was overwritten
 	topleft.number = 1;
@@ -562,8 +555,30 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQua
 		circle(temp2, corners[i].centre, 20, (128, 128, 128), -1);
 	}
 	// Debug display
-	imshow("corners", temp2);
+	imshow("corners in captured", temp2);
 	waitKey(0);
+
+	Mat temp3 = checkerboard.clone();
+	rectangle(temp3, topleft.points[0], topleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, topleft.points[1], topleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, topleft.points[2], topleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, topleft.points[3], topleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, topright.points[0], topright.centre, (128, 128, 128), 1);
+	rectangle(temp3, topright.points[1], topright.centre, (128, 128, 128), 1);
+	rectangle(temp3, topright.points[2], topright.centre, (128, 128, 128), 1);
+	rectangle(temp3, topright.points[3], topright.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomleft.points[0], bottomleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomleft.points[1], bottomleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomleft.points[2], bottomleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomleft.points[3], bottomleft.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomright.points[0], bottomright.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomright.points[1], bottomright.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomright.points[2], bottomright.centre, (128, 128, 128), 1);
+	rectangle(temp3, bottomright.points[3], bottomright.centre, (128, 128, 128), 1);
+	// Debug display
+	imshow("corners in gt", temp3);
+	waitKey(0);
+
 
 	// New, easier idea:
 	// Try every combination of fitting the gt corners to the captured corners
@@ -602,7 +617,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQua
 
 			// DEBUG
 			// Draw the homographied quads
-			Mat temp3 = img.clone();
+			Mat temp3 = checkerboard.clone();
 			for (Quad q : quads)
 			{
 				Vector3f size(L2norm(q.points[0] - q.points[1]), 0, 1);
@@ -618,7 +633,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQua
 
 
 
-				circle(temp3, centre, s / 2, (128, 128, 128), -1);
+				circle(temp3, centre, 20, (128, 128, 128), -1);
 			} 
 			// Debug display
 			imshow("permutation", temp3);
@@ -627,7 +642,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQua
 
 			// Transform all captured quads with H
 
-			float e = GetReprojectionError(gtQuads, quads, h);
+			float e = GetReprojectionError(gtCorners, corners, indices, h);
   			if (e < minError)
 			{
 				minError = e;
@@ -649,6 +664,11 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQua
 		cout << "The minimum error was " << minError << endl;
 
 		H = homography;
+
+		corners[perm[0]].number = 1;
+		corners[perm[1]].number = 5;
+		corners[perm[2]].number = 28;
+		corners[perm[3]].number = 32;
 	}
 	else if (index == 3 || index == 2)
 	{
@@ -664,6 +684,23 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, vector<Quad>& gtQua
 		// This image was clearly pretty bad. Throw it away
 		return false;
 	}
+
+	Mat temp6 = checkerboard.clone();
+	for (Quad q : quads)
+	{
+
+		Vector3f x(q.centre.x, q.centre.y, 1);
+		Vector3f Hx = H * x;
+		Hx / Hx(2);
+		auto centre = Point(Hx(0), Hx(1));
+
+
+
+		circle(temp6, centre, 20, (128, 128, 128), -1);
+	}
+	// Debug display
+	imshow("Final homography", temp6);
+	waitKey(0);
 
 	// Now number quads
 	TransformAndNumberQuads(H, quads);
@@ -843,11 +880,13 @@ bool ComputeIntrinsicsAndExtrinsicFromHomography(const Matrix3f& H, Matrix3f& K,
 	Vector3f r0 = T.col(0);
 	Vector3f r1 = T.col(1);
 
+	// Can we coerce these into being orthogonal?
+
 	// r0 dot r1 should be 0
 	if (r0.dot(r1) != 0)
 	{
-		cout << "Rotation vectors are not orthogonal!" << endl;
-		return false;
+		cout << "Rotation vectors are not orthogonal!" << endl; // not yet
+		//return false;
 	}
 
 	return true;
