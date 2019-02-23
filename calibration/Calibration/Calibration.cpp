@@ -13,6 +13,7 @@ using namespace Eigen;
 #define CROSS false
 
 //#define DEBUG
+#define DEBUG_CORNERS
 
 /*
 	Align checkerboard.
@@ -45,6 +46,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 	// Using OpenCV's example, gonna use a kernelSize of 11 and a constant of 2
 	// pick kernel size based on image size
 	Mat temp = img.clone();
+	// downsample for this
 	if (!GaussianThreshold(temp, img, 11, 2))
 	{
 		return false;
@@ -79,12 +81,15 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 			continue;
 		}
 		img = erode;
+		// use downsampled version
 
 #ifdef DEBUG
 		namedWindow("erode", WINDOW_NORMAL);
 		imshow("erode", erode);
 		if (debug) waitKey(0);
 #endif
+
+		// Somehow go high res here?
 
 		// Find contours
 		vector<Contour> contours;
@@ -97,6 +102,8 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 		// draw all the contours onto the eroded image
 		if (debug) DrawContours(img, contours);
 #endif
+
+
 
 		// get quadrangles from contours
 		vector<Quad> quadsThisIteration;
@@ -112,6 +119,12 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 				q.associatedCorners[2] = pair<int, int>(-1, -1);
 				q.associatedCorners[3] = pair<int, int>(-1, -1);
 				q.numLinkedCorners = 0;
+				q.size = 0;
+				for (int idx = 0; idx < 4; ++idx)
+				{
+					q.size += DistBetweenPoints(q.centre, q.points[idx])/4;
+				}
+
 				quadsThisIteration.push_back(q);
 #ifdef DEBUG
 				// draw all the quads onto the image
@@ -140,8 +153,8 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 						Mat orig = img.clone();
 						if (debug)
 						{
-							DrawQuad(orig, q2);
-							DrawQuad(newErode, q1);
+							//DrawQuad(orig, q2);
+							//DrawQuad(newErode, q1);
 						}
 
 						// This quad already exists. No need to search further
@@ -155,7 +168,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 					// This quad wasn't found in previous iterations. Add it
 					quads.push_back(q1);
 					Mat newErode = erode.clone();
-					if (debug) DrawQuad(newErode, q1);
+					//if (debug) DrawQuad(newErode, q1);
 				}
 			}
 		}
@@ -172,6 +185,21 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 #endif
 	}
 
+	auto temp5 = checkerboard.clone();
+	for (Quad q : quads)
+	{
+		rectangle(temp5, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
+		rectangle(temp5, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
+		rectangle(temp5, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
+		rectangle(temp5, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
+	}
+
+
+	// Debug display
+	imshow("all quads", temp5);
+	waitKey(0);
+	
+
 	// Link corners
 	// For each pair of quads, find any corners they share
 	// Note these links in an array, where the index of the quad's own corner
@@ -179,75 +207,148 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 	for (int i = 0; i < quads.size(); ++i)
 	{
 		Quad& q1 = quads[i];
+
+		if (q1.numLinkedCorners == 4)
+		{
+			// Can't have nay more corners
+			continue;
+		}
+
+		// Find all quads within a certain radius
+		vector<pair<int, Quad>> closestQuads;
 		const float diag1 = GetLongestDiagonal(q1);
-		for (int j = i; j < quads.size(); ++j)
+		for (int j = i + 1; j < quads.size(); ++j)
 		{
 			Quad& q2 = quads[j];
 
-			// Sanity check - if their centres are further away than twice the longest diagonal of the first quad, 
-			// ignore this quad
-			if (DistBetweenPoints(q1.centre, q2.centre) > 1.5 * diag1)
+			if (q2.numLinkedCorners == 4)
 			{
 				continue;
 			}
 
-			// For each corner of q1, does it lie within the rectangle created
-			// by the two centres:
+			// Sanity check - if their centres are further away than twice the longest diagonal of the first quad, 
+			// ignore this quad
+			if (DistBetweenPoints(q1.centre, q2.centre) < 2 * diag1)
+			{
+				closestQuads.push_back(pair<int, Quad>(j, q2));
+			}	
+		}
+
+		// For each corner of q1, find the closest point amongst the closest quads
+		for (int c = 0; c < 4; ++c)
+		{
+			Point corner = q1.points[c];
+			float minDistToPoint = 2*diag1; // upper bound
+
+			int closestQuadIndex = 0;
+			int closestPointIndex = 0;
+			for (int k = 0; k < closestQuads.size(); ++k)
+			{
+				Quad q2 = closestQuads[k].second;
+				for (int c2 = 0; c2 < 4; ++c2)
+				{
+					float d = DistBetweenPoints(q2.points[c2], corner);
+					if (d < minDistToPoint)
+					{
+						minDistToPoint = d;
+						closestPointIndex = c2;
+						closestQuadIndex = closestQuads[k].first;
+					}
+				}
+			}
+
+			Quad& q2 = quads[closestQuadIndex];
+			Point corner2 = q2.points[closestPointIndex];
+
+			if (debug)
+			{
+				auto temp = checkerboard.clone();
+				rectangle(temp, q1.points[0], q1.centre, (128, 128, 128), CV_FILLED);
+				rectangle(temp, q1.points[1], q1.centre, (128, 128, 128), CV_FILLED);
+				rectangle(temp, q1.points[2], q1.centre, (128, 128, 128), CV_FILLED);
+				rectangle(temp, q1.points[3], q1.centre, (128, 128, 128), CV_FILLED);
+				rectangle(temp, q2.points[0], q2.centre, (128, 128, 128), CV_FILLED);
+				rectangle(temp, q2.points[1], q2.centre, (128, 128, 128), CV_FILLED);
+				rectangle(temp, q2.points[2], q2.centre, (128, 128, 128), CV_FILLED);
+				rectangle(temp, q2.points[3], q2.centre, (128, 128, 128), CV_FILLED);
+
+				circle(temp, q1.centre, 2*diag1, (128, 128, 128), 2);
+
+				// Debug display
+				imshow("The two quads under consideration", temp);
+				waitKey(0);
+			}
+
+			// Do these corners lie within a rectangle defined by the centres?
 			/*
 			|------c2
 			|	    |
 			|       |
 			c1------|
 			*/
-			Point corner1;
-			int index1 = -1;
-			bool validCorner = false;
-			for (int k = 0; k < 4; ++k)
+			if (!DoesPointLieWithinQuadOfTwoCentres(corner, q1, q2))
 			{
-				if (DoesPointLieWithinQuadOfTwoCentres(q1.points[k], q1, q2))
+				// This corner failed to match. Move on
+				continue;
+			}
+			if (!DoesPointLieWithinQuadOfTwoCentres(corner2, q1, q2))
+			{
+				// This corner failed to match. Move on
+				continue;
+			}
+
+			// Have these points already matched before?
+			if (q2.associatedCorners[closestPointIndex].first != -1)
+			{
+				if (q2.associatedCorners[closestPointIndex].first != q1.id)
 				{
-					validCorner = true;
-					corner1 = q1.points[k];
-					index1 = k;
-					break;
+					// Two quads have matched to the same corner.
+					// Assume the first is right
+					continue;
+				}
+			}
+			if (q1.associatedCorners[c].first != -1)
+			{
+				if (q1.associatedCorners[c].first != q2.id)
+				{
+					// Two quads have matched to the same corner.
+					// Assume the first is right
+					continue;
 				}
 			}
 
-			if (!validCorner)
+			if (DistBetweenPoints(corner, corner2) > 0.7*diag1)
 			{
 				continue;
 			}
 
-			// Now repeat for the corners of q2:
-			Point corner2;
-			int index2 = -1;
-			validCorner = false;
-			for (int k = 0; k < 4; ++k)
-			{
-				if (DoesPointLieWithinQuadOfTwoCentres(q2.points[k], q1, q2))
-				{
-					validCorner = true;
-					corner2 = q2.points[k];
-					index2 = k;
-					break;
-				}
-			}
-
-			if (!validCorner)
-			{
-				continue;
-			}
-
-			// Ok we have two corners that are the same corner
-			// Associate these, and then set the actual point
-			// to the average of the corners, as that is where the true corner is
-			Point corner((corner1.x+corner2.x)/2, (corner1.y+corner2.y)/2);
-			q1.points[index1] = corner;
-			q2.points[index2] = corner;
-			q1.associatedCorners[index1] = pair<int, int>(q2.id, index2);
-			q2.associatedCorners[index2] = pair<int, int>(q1.id, index1);
+			// Things worked! Mark this
+			Point cornerFinal((corner.x + corner2.x) / 2, (corner.y + corner2.y) / 2);
+			q1.points[c] = cornerFinal;
+			q2.points[closestPointIndex] = cornerFinal;
+			q1.associatedCorners[c] = pair<int, int>(q2.id, closestPointIndex);
+			q2.associatedCorners[closestPointIndex] = pair<int, int>(q1.id, c);
 			q1.numLinkedCorners++;
 			q2.numLinkedCorners++;
+
+			if (debug)
+			{
+				auto temp = checkerboard.clone();
+				rectangle(temp, q1.points[0], q1.centre, (128, 128, 128), 1);
+				rectangle(temp, q1.points[1], q1.centre, (128, 128, 128), 1);
+				rectangle(temp, q1.points[2], q1.centre, (128, 128, 128), 1);
+				rectangle(temp, q1.points[3], q1.centre, (128, 128, 128), 1);
+				rectangle(temp, q2.points[0], q2.centre, (128, 128, 128), 1);
+				rectangle(temp, q2.points[1], q2.centre, (128, 128, 128), 1);
+				rectangle(temp, q2.points[2], q2.centre, (128, 128, 128), 1);
+				rectangle(temp, q2.points[3], q2.centre, (128, 128, 128), 1);
+
+				rectangle(temp, q1.centre, q2.centre, (128, 128, 128), 1);
+
+				// Debug display
+				imshow("It worked", temp);
+				waitKey(0);
+			}
 		}
 	}
 

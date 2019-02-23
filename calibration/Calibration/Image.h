@@ -34,6 +34,7 @@ struct Quad
 	int number;
 	std::pair<int, int> associatedCorners[4];
 	int numLinkedCorners;
+	float size;
 };
 
 struct LineSegment
