@@ -272,6 +272,52 @@ bool GetHomographyFromMatches(const vector<pair<Point, Point>> points, Matrix3f&
 
 	return true;
 }
+bool GetHomographyFromMatches(const vector<pair<Point2f, Point2f>> points, Matrix3f& H)
+{
+	// Construct A
+	MatrixXf A;
+	A.resize(points.size() * 2, 9);
+	A.setZero();
+	for (unsigned int i = 0; i < points.size(); ++i)
+	{
+		auto& p = points[i];
+
+		auto secondPoint = Vector3f(p.second.x, p.second.y, 1.f); // left
+		auto firstPoint = Vector3f(p.first.x, p.first.y, 1.f); // right
+
+															   // Continue building A
+		A(2 * i, 0) = -1 * firstPoint(0);
+		A(2 * i, 1) = -1 * firstPoint(1);
+		A(2 * i, 2) = -1;
+		A(2 * i, 6) = firstPoint(0) * secondPoint(0);
+		A(2 * i, 7) = firstPoint(1) * secondPoint(0);
+		A(2 * i, 8) = secondPoint(0);
+
+		A(2 * i + 1, 3) = -1 * firstPoint(0);
+		A(2 * i + 1, 4) = -1 * firstPoint(1);
+		A(2 * i + 1, 5) = -1;
+		A(2 * i + 1, 6) = firstPoint(0) * secondPoint(1);
+		A(2 * i + 1, 7) = firstPoint(1) * secondPoint(1);
+		A(2 * i + 1, 8) = secondPoint(1);
+	}
+
+	// Get the V matrix of the SVD decomposition
+	BDCSVD<MatrixXf> svd(A, ComputeThinU | ComputeFullV);
+	if (!svd.computeV())
+		return false;
+	auto& V = svd.matrixV();
+
+	// Set H to be the column of V corresponding to the smallest singular value
+	// which is the last as singular values come well-ordered
+	H << V(0, 8), V(1, 8), V(2, 8),
+		V(3, 8), V(4, 8), V(5, 8),
+		V(6, 8), V(7, 8), V(8, 8);
+
+	// Normalise H
+	H /= H(2, 2);
+
+	return true;
+}
 
 /*
 	Evaluate a potential Homography, given the two lists of points. 
@@ -320,6 +366,7 @@ vector<pair<Feature, Feature> > EvaluateHomography(const vector<pair<Feature,Fea
 
 	return inlierSet;
 }
+
 
 /*
 	Bundle Adjustment

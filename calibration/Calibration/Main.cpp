@@ -17,7 +17,7 @@ using namespace Eigen;
 
 #define CHECKERBOARD_FILENAME "checkerboard.jpg"
 
-//#define DEBUG
+#define DEBUG
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -54,6 +54,8 @@ using namespace Eigen;
 	Issues:
 	- Cannot get a good homography
 	- With a mildly inaccurate homography ... how do we number them correctly?
+	- Numbering - need to record indices
+	- Homography legit has a bug what the hell
 
 	TODO:
 	- refinement
@@ -106,7 +108,40 @@ int main(int argc, char** argv)
 	I << 1, 0, 0,
 		 0, 1, 0,
 		 0, 0, 1;
-	TransformAndNumberQuads(I, gtQuads);
+	// initial numbering
+	int topleft = 0;
+	int topright = 0;
+	int bottomleft = 0;
+	int bottomright = 0;
+	for (int i = 0; i < gtQuads.size(); ++i)
+	{
+		const Quad& q = gtQuads[i];
+		// topleft
+		if ((float)q.centre.x < gtQuads[topleft].centre.x*0.9f || (float)q.centre.y < gtQuads[topleft].centre.y*0.9f)
+		{
+			topleft = i;
+		}
+		// topright
+		if ((float)q.centre.x > gtQuads[topright].centre.x*1.1f || (float)q.centre.y < gtQuads[topright].centre.y*0.9f)
+		{
+			topright = i;
+		}
+		// bottom left
+		if ((float)q.centre.x < gtQuads[bottomleft].centre.x*0.9f || (float)q.centre.y > gtQuads[bottomleft].centre.y*1.1f)
+		{
+			bottomleft = i;
+		}
+		// bottom right
+		if ((float)q.centre.x > gtQuads[bottomright].centre.x*1.1f || (float)q.centre.y > gtQuads[bottomright].centre.y*1.1f)
+		{
+			bottomright = i;
+		}
+	}
+	gtQuads[topleft].number = 1;
+	gtQuads[topright].number = 5;
+	gtQuads[bottomleft].number = 28;
+	gtQuads[bottomright].number = 32;
+	//TransformAndNumberQuads(I, gtQuads);
 
 
 	// DEBUG

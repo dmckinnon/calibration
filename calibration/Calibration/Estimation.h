@@ -24,6 +24,8 @@ std::pair<Eigen::Matrix3f, Eigen::Matrix3f> ConvertPoints(const std::vector<std:
 
 // Estimate Homography
 bool GetHomographyFromMatches(const std::vector<std::pair<cv::Point, cv::Point>> points, Eigen::Matrix3f& H);
+bool GetHomographyFromMatches(const std::vector<std::pair<cv::Point2f, cv::Point2f>> points, Eigen::Matrix3f& H);
+
 
 // Evaluate Homography
 std::vector<std::pair<Feature, Feature> > EvaluateHomography(const std::vector<std::pair<Feature, Feature> >& matches, const Eigen::Matrix3f& H);

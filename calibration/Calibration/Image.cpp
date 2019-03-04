@@ -917,6 +917,22 @@ int PointDistToLineSigned(const Point& p, const Point& p1, const Point& p2)
 }
 
 /*
+	Comparator for quads, ordering by x coord of centre
+*/
+bool CompareQuadByCentreX(Quad a, Quad b)
+{
+	return a.centre.x < b.centre.x;
+}
+
+/*
+	Comparator for quads, ordering by angle to centre
+*/
+bool CompareQuadByAngleToCentre(Quad a, Quad b)
+{
+	return a.angleToCentre < b.angleToCentre;
+}
+
+/*
 	For two quads, does a point lie within the quadrilateral defined
 	by the lines from each quad's centre, perpendicular to the quad's sides?
 */

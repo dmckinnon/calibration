@@ -28,13 +28,14 @@ struct Contour
 struct Quad
 {
 	cv::Point points[4];
-	cv::Point centre;
+	cv::Point2f centre;
 
 	int id;
 	int number;
 	std::pair<int, int> associatedCorners[4];
 	int numLinkedCorners;
 	float size;
+	float angleToCentre;
 };
 
 struct LineSegment
@@ -53,6 +54,8 @@ const cv::Mat rect = (cv::Mat_<int>(3, 3) << 1, 1, 1, 1, 1, 1, 1, 1, 1);
 
 // Requires that kernelSize be odd and positive
 bool GaussianThreshold(const cv::Mat& input, cv::Mat& output, int kernelSize, int constant);
+
+bool IsInBounds(int height, int width, cv::Point p);
 
 // Erosion using one of the supplied kernels
 bool Erode(const cv::Mat& input, cv::Mat& output, cv::Mat erosionKernel);
@@ -79,6 +82,10 @@ float DistBetweenPoints(const cv::Point& p1, const cv::Point& p2);
 
 // Distance from point to line, signed
 int PointDistToLineSigned(const cv::Point& p, const cv::Point& p1, const cv::Point& p2);
+
+// Compare quads
+bool CompareQuadByCentreX(Quad a, Quad b);
+bool CompareQuadByAngleToCentre(Quad a, Quad b);
 
 //  Intersection of two lines
 cv::Point GetIntersectionOfLines(const LineSegment& l1, const LineSegment& l2);

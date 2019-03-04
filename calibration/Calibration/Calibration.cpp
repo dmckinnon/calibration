@@ -120,6 +120,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 				q.associatedCorners[3] = pair<int, int>(-1, -1);
 				q.numLinkedCorners = 0;
 				q.size = 0;
+				q.number = 0;
 				for (int idx = 0; idx < 4; ++idx)
 				{
 					q.size += DistBetweenPoints(q.centre, q.points[idx])/4;
@@ -467,7 +468,7 @@ int FindCornerFromEdgeQuad(const Quad& root, const Quad& branch, vector<Quad>& q
 */
 // Helper
 // just do reprojection error from the corner centres
-float GetReprojectionError(const Quad gtCorners[], const Quad corners[], int indices[], const Matrix3f& H)
+float GetReprojectionError(const Quad gtCorners[], const vector<Quad> corners, int indices[], const Matrix3f& H)
 {
 
 	// Find the closest quad in gt set and get error
@@ -480,7 +481,7 @@ float GetReprojectionError(const Quad gtCorners[], const Quad corners[], int ind
 		Vector3f x(q2.centre.x, q2.centre.y, 1);
 		Vector3f Hx = H * x;
 		Hx / Hx(2);
-		auto newQ2centre = Point(Hx(0), Hx(1));
+		auto newQ2centre = Point2f(Hx(0), Hx(1));
 
 		e += L2norm(q1.centre - newQ2centre);
 	}
@@ -494,11 +495,14 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 
 	// Find the four corners of the gt quads and mark them
 	// The topmost leftmost is 1, rightmost is 5, bottom left 28, bottom right 32
+
+	// TODO: make these indices
+
 	Quad topleft = gtQuads[0];
 	Quad topright = gtQuads[0];
 	Quad bottomleft = gtQuads[0];
 	Quad bottomright = gtQuads[0];
-	for (const Quad& q : gtQuads)
+	for (Quad& q : gtQuads)
 	{
 		// topleft
 		if ((float)q.centre.x < topleft.centre.x*0.9f || (float)q.centre.y < topleft.centre.y*0.9f)
@@ -535,23 +539,19 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	// Number these, then number the final corner
 
 	// Find the corners
-	Quad corners[4];
-	int index = 0;
+	vector<Quad> corners;
 	for (const Quad& q : quads)
 	{
 		if (q.numLinkedCorners == 1)
 		{
-			corners[index] = q;
-			index ++;
-			if (index == 4) break;
+			corners.push_back(q);
+			if (corners.size() == 4) break;
 		}
 	}
 
 	Mat temp2 = img.clone();
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < corners.size(); ++i)
 	{
-		
-
 		circle(temp2, corners[i].centre, 20, (128, 128, 128), -1);
 	}
 	// Debug display
@@ -590,23 +590,64 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	// warp all corners, and find the reprojection error
 	// Pick the H with the smallest reprojection error
 
-	if (index == 4)
+	if (corners.size() == 4)
 	{
+		// normalise all the points
+		topleft.centre.x /= (float)checkerboard.cols;
+		topleft.centre.y /= (float)checkerboard.rows;
+		topright.centre.x /= (float)checkerboard.cols;
+		topright.centre.y /= (float)checkerboard.rows;
+		bottomright.centre.x /= (float)checkerboard.cols;
+		bottomright.centre.y /= (float)checkerboard.rows;
+		bottomleft.centre.x /= (float)checkerboard.cols;
+		bottomleft.centre.y /= (float)checkerboard.rows;
+
+		// TODO: accept floats in points
+
 		// We have all four corners.
+		// Order them in increasing angle relative to horizontal from centre
+		Point centre(img.cols/2, img.rows/2);
+		corners[0].angleToCentre = atan2(centre.y - corners[0].centre.y, corners[0].centre.x - centre.x) * 180 / PI;
+		corners[1].angleToCentre = atan2(centre.y - corners[1].centre.y, corners[1].centre.x - centre.x) * 180 / PI;
+		corners[2].angleToCentre = atan2(centre.y - corners[2].centre.y, corners[2].centre.x - centre.x) * 180 / PI;
+		corners[3].angleToCentre = atan2(centre.y - corners[3].centre.y, corners[3].centre.x - centre.x) * 180 / PI;
+		sort(corners.begin(), corners.end(), CompareQuadByAngleToCentre);
+
+		// This gives us only four possibilities, of which only two should work
+		corners[0].centre.x = (float)corners[0].centre.x/(float)img.cols;
+		corners[0].centre.y /= (float)img.rows;
+		corners[1].centre.x /= (float)img.cols;
+		corners[1].centre.y /= (float)img.rows;
+		corners[2].centre.x /= (float)img.cols;
+		corners[2].centre.y /= (float)img.rows;
+		corners[3].centre.x /= (float)img.cols;
+		corners[3].centre.y /= (float)img.rows;
+
 		// Test all 24 possibilities for minimal reprojection error
-		int indices[] = { 0,1,2,3 };
+		
 
 		// Iterate over all permutations
 		float minError = 100000000;
 		int perm[] = { 0,1,2,3 };
 		Matrix3f homography;
-		do {
+		for (int i = 0; i < 4; ++i)
+		{
+
+		//}
+		//do {
 			// the gt corners 0,1,2,3 are associated with indices[0],[1],[2],[3] of captured corners
-			vector<pair<Point, Point>> matches;
-			matches.push_back(pair<Point, Point>(corners[indices[0]].centre, topleft.centre));
-			matches.push_back(pair<Point, Point>(corners[indices[1]].centre, topright.centre));
-			matches.push_back(pair<Point, Point>(corners[indices[2]].centre, bottomleft.centre));
-			matches.push_back(pair<Point, Point>(corners[indices[3]].centre, bottomright.centre));
+			vector<pair<Point2f, Point2f>> matches;
+			matches.push_back(pair<Point2f, Point2f>(corners[i].centre, topleft.centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+1)%4].centre, topright.centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+2)%4].centre, bottomleft.centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+3)%4].centre, bottomright.centre));
+
+			cout << "Matches this round are: " << endl;
+			for (auto m : matches)
+			{
+				cout << "\t" << m.first << " <-> " << m.second << endl;
+				
+			}
 
 			Matrix3f h;
 			if (!GetHomographyFromMatches(matches, h))
@@ -617,31 +658,30 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 
 			// DEBUG
 			// Draw the homographied quads
-			Mat temp3 = checkerboard.clone();
-			for (Quad q : quads)
+			Mat temp3 = checkerboard.clone(); // checkerboard
+			for (Quad q : quads) // quads
 			{
-				Vector3f size(L2norm(q.points[0] - q.points[1]), 0, 1);
-				Vector3f Hsize = h * size;
-				Hsize /= Hsize(2);
-				float s = Hsize(0);
-				s = s < 0 ? 2 : s;
-
-				Vector3f x(q.centre.x, q.centre.y, 1);
+				Vector3f x(q.centre.x/(float)img.cols, q.centre.y / (float)img.rows, 1);
 				Vector3f Hx = h * x;
-				Hx / Hx(2);
-				auto centre = Point(Hx(0), Hx(1));
+				Hx /= Hx(2);
+				auto centre = Point2f(Hx(0), Hx(1));
 
+				centre.x *= (float)temp3.cols;
+				centre.y *= (float)temp3.rows;
 
-
-				circle(temp3, centre, 20, (128, 128, 128), -1);
+				circle(temp3, Point((int)centre.x, (int)centre.y), 20, (128, 128, 128), CV_FILLED);
 			} 
 			// Debug display
-			imshow("permutation", temp3);
+			imshow("homography", temp3);
 			waitKey(0);
+			
 
+
+			// NOW FIX THIS
+			// Update reprojection error
 
 			// Transform all captured quads with H
-
+			int indices[] = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
 			float e = GetReprojectionError(gtCorners, corners, indices, h);
   			if (e < minError)
 			{
@@ -653,7 +693,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 				homography = h;
 			}
 
-		} while (std::next_permutation(indices, indices + 4));
+		}// while (std::next_permutation(indices, indices + 4));
 
 		if (minError == 100000000)
 		{
@@ -665,12 +705,31 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 
 		H = homography;
 
-		corners[perm[0]].number = 1;
-		corners[perm[1]].number = 5;
-		corners[perm[2]].number = 28;
-		corners[perm[3]].number = 32;
+		for (Quad& q : quads)
+		{
+			if (q.id == corners[perm[0]].id)
+			{
+				q.number = 1;
+			}
+			if (q.id == corners[perm[1]].id)
+			{
+				q.number = 5;
+			}
+			if (q.id == corners[perm[2]].id)
+			{
+				q.number = 28;
+			}
+			if (q.id == corners[perm[3]].id)
+			{
+				q.number = 32;
+			}
+		}
+		//corners[perm[0]].number = 1;
+		//corners[perm[1]].number = 5;
+		//corners[perm[2]].number = 28;
+		//corners[perm[3]].number = 32;
 	}
-	else if (index == 3 || index == 2)
+	else if (corners.size() == 3 || corners.size() == 2)
 	{
 		// Just use two. It's simplest
 		// Or, for now, could just throw it away?
@@ -688,7 +747,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	Mat temp6 = checkerboard.clone();
 	for (Quad q : quads)
 	{
-
+		// NEED TO NORMALISE
 		Vector3f x(q.centre.x, q.centre.y, 1);
 		Vector3f Hx = H * x;
 		Hx / Hx(2);
@@ -720,6 +779,8 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 */
 void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 {
+	int currentQuadIndex = 1;
+
 	// First, transform all quads
 	for (Quad& q : quads)
 	{
@@ -733,119 +794,405 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	vector<Quad> localQuads(quads);
 	vector<Quad> orderedQuads;
 
-	// Third, take the topmost quad. Find everything in its row.
-	// order from left to right. Number them, remove them
-	int quadNumber = 1;
-	int iteration = 0;
-	while (!localQuads.empty())
+	// Do each row separately, hardcoded
+	// Horrible, but hey it works. 
+
+	// Find quads #1 and #5:
+	int indexQ1 = -1;
+	int indexQ5 = -1;
+	for (int i = 0; i < quads.size(); ++i)
 	{
-		if (quadNumber > 200)
+		if (quads[i].number == 1)
 		{
-			break;
+			indexQ1 = i;
 		}
-
-		// Get the top quad, remove it
-		Quad topQuad;
-		topQuad.centre = Point(100000,100000); // obviously not the top Quad
-		int topIndex = 0;
-		for (int i = 0; i < localQuads.size(); ++i)
+		if (quads[i].number == 5)
 		{
-			Quad& q = localQuads[i];
-			if (q.centre.y < topQuad.centre.y)
-			{
-				topQuad = q;
-				topIndex = i;
-			}
+			indexQ5 = i;
 		}
-		vector<Quad> thisRow;
-		thisRow.push_back(topQuad);
-		localQuads.erase(localQuads.begin() + topIndex);
+	}
+	if (indexQ1 == -1 || indexQ5 == -1)
+	{
+		// we failed? Return. SHould have an error code. At least false?
+		return;
+	}
+	
+	Quad& q1 = quads[indexQ1];
+	Quad& q5 = quads[indexQ5];
+	// Draw a line between the two
+	LineSegment l;
+	l.p1 = q1.centre;
+	l.p2 = q5.centre;
 
-		// Get margin of error
-		int margin = L2norm(topQuad.centre - topQuad.points[0]);
-
-		// Find all quads in this row and remove them
-		while (true)
+	// Find the three other quads whose centres lie within half a diagonal's length of the line
+	float bound = GetLongestDiagonal(q1)/2;
+	vector<Quad> quadsInRow; // TODO
+	for (Quad& q : quads)
+	{
+		float d = abs(PointDistToLineSigned(q.centre, q1.centre, q5.centre));
+		if (d < bound)
 		{
-			// Find first available quad in this row
-			bool found = false;
-			int i = 0;
-			for (i = 0; i < localQuads.size(); ++i)
+			quadsInRow.push_back(q);
+		}
+	}
+
+	// Order all these quads by x coord
+	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// Number
+	for (int i = 0; i < quadsInRow.size(); ++i)
+	{
+		quadsInRow[i].number = currentQuadIndex;
+		currentQuadIndex++;
+	}
+	q5.number = 5;
+	currentQuadIndex = 6;
+
+	// Number the two attached to q1 and q5
+	int indexQ6 = 0;
+	int indexQ9 = 0;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (q1.associatedCorners[i].first != -1)
+		{
+			quads[q1.associatedCorners[i].second].number = 6;
+			indexQ6 = i;
+		}
+		if (q5.associatedCorners[i].first != -1)
+		{
+			quads[q5.associatedCorners[i].second].number = 9;
+			indexQ9 = i;
+		}
+	}
+
+	// Next row
+	Quad& q6 = quads[q1.associatedCorners[indexQ6].second];
+	Quad& q9 = quads[q5.associatedCorners[indexQ9].second];
+	// Draw a line between the two
+	l.p1 = q6.centre;
+	l.p2 = q9.centre;
+
+	bound = GetLongestDiagonal(q6) / 2;
+	quadsInRow.clear();
+	for (Quad& q : quads)
+	{
+		float d = abs(PointDistToLineSigned(q.centre, q6.centre, q9.centre));
+		if (d < bound)
+		{
+			quadsInRow.push_back(q);
+		}
+	}
+	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// Number
+	for (int i = 0; i < quadsInRow.size(); ++i)
+	{
+		quadsInRow[i].number = currentQuadIndex;
+		currentQuadIndex++;
+	}
+	q9.number = 9;
+	currentQuadIndex = 10;
+
+	// Number the two attached to q1 and q5
+	int indexQ10 = -1;
+	int indexQ14 = -1;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (q6.associatedCorners[i].first != -1)
+		{
+			if (quads[q6.associatedCorners[i].second].number == 0)
 			{
-				Quad& q = localQuads[i];
-				if (abs(q.centre.y - topQuad.centre.y) < margin / 2 && q.centre != topQuad.centre)
+				if (quads[q6.associatedCorners[i].second].centre.y > q6.centre.y && quads[q6.associatedCorners[i].second].centre.x < q6.centre.x)
 				{
-					thisRow.push_back(q);
-					found = true;
-					break;
+					quads[q6.associatedCorners[i].second].number = 10;
+					indexQ10 = i;
 				}
 			}
-
-			// We found all the quads in this row that we could
-			if (!found)
+		}
+		if (q9.associatedCorners[i].first != -1)
+		{
+			if (quads[q9.associatedCorners[i].second].number == 0)
 			{
-				break;
-			}
-
-			// Remove the quad
-			localQuads.erase(localQuads.begin() + i);
-
-			if (localQuads.empty())
-			{
-				break;
+				if (quads[q9.associatedCorners[i].second].centre.y > q9.centre.y)
+				{
+					quads[q9.associatedCorners[i].second].number = 14;
+					indexQ14 = i;
+				}
 			}
 		}
-
-		// Order quads
-		sort(thisRow.begin(), thisRow.end(), OrderTwoQuadsByAscendingCentreX);
-
-		// Number quads
-		for (unsigned int n = 0; n < thisRow.size(); ++n)
-		{
-			thisRow[n].number = quadNumber;
-			quadNumber++;
-		}
-
-		// What if a row is too small? Gotta account
-		switch (iteration)
-		{
-		case 0: 
-			quadNumber = quadNumber < 6 ? 6 : quadNumber;
-			break;
-		case 1:
-			quadNumber = quadNumber < 10 ? 10 : quadNumber;
-			break;
-		case 2:
-			quadNumber = quadNumber < 15 ? 15 : quadNumber;
-			break;
-		case 3:
-			quadNumber = quadNumber < 19 ? 19 : quadNumber;
-			break;
-		case 4:
-			quadNumber = quadNumber < 24 ? 24 : quadNumber;
-			break;
-		case 5:
-			quadNumber = quadNumber < 29 ? 29 : quadNumber;
-			break;
-		default:
-			break;
-		}
-
-		// Add to ordered list
-		for (Quad& q : thisRow)
-		{
-			orderedQuads.push_back(q);
-		}
-
-		iteration++;
 	}
-
-	// Repeat
-	quads.clear();
-	for (Quad& q : orderedQuads)
+	if (indexQ10 == -1 || indexQ14 == -1)
 	{
-		quads.push_back(q);
+		// we failed? Return. SHould have an error code. At least false?
+ 		return;
 	}
+
+	// Next row
+	Quad& q10 = quads[q1.associatedCorners[indexQ10].second];
+	Quad& q14 = quads[q5.associatedCorners[indexQ14].second];
+	// Draw a line between the two
+	l.p1 = q10.centre;
+	l.p2 = q14.centre;
+
+	bound = GetLongestDiagonal(q10) / 2;
+	quadsInRow.clear();
+	for (Quad& q : quads)
+	{
+		float d = abs(PointDistToLineSigned(q.centre, q10.centre, q14.centre));
+		if (d < bound)
+		{
+			quadsInRow.push_back(q);
+		}
+	}
+	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// Number
+	for (int i = 0; i < quadsInRow.size(); ++i)
+	{
+		quadsInRow[i].number = currentQuadIndex;
+		currentQuadIndex++;
+	}
+	q14.number = 14;
+	currentQuadIndex = 15;
+
+	// Number the two attached to q1 and q5
+	int indexQ15 = -1;
+	int indexQ18 = -1;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (q10.associatedCorners[i].first != -1)
+		{
+			if (quads[q10.associatedCorners[i].second].number == 0)
+			{
+				if (quads[q10.associatedCorners[i].second].centre.y > q10.centre.y)
+				{
+					quads[q10.associatedCorners[i].second].number = 15;
+					indexQ15 = i;
+				}
+			}
+		}
+		if (q14.associatedCorners[i].first != -1)
+		{
+			if (quads[q14.associatedCorners[i].second].number == 0)
+			{
+				if (quads[q14.associatedCorners[i].second].centre.y > q14.centre.y)
+				{
+					quads[q14.associatedCorners[i].second].number = 18;
+					indexQ18 = i;
+				}
+			}
+		}
+	}
+	if (indexQ15 == -1 || indexQ18 == -1)
+	{
+		// we failed? Return. SHould have an error code. At least false?
+		return;
+	}
+
+	// Next row
+	Quad& q15 = quads[q1.associatedCorners[indexQ15].second];
+	Quad& q18 = quads[q5.associatedCorners[indexQ18].second];
+	// Draw a line between the two
+	l.p1 = q15.centre;
+	l.p2 = q18.centre;
+
+	bound = GetLongestDiagonal(q15) / 2;
+	quadsInRow.clear();
+	for (Quad& q : quads)
+	{
+		float d = abs(PointDistToLineSigned(q.centre, q15.centre, q18.centre));
+		if (d < bound)
+		{
+			quadsInRow.push_back(q);
+		}
+	}
+	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// Number
+	for (int i = 0; i < quadsInRow.size(); ++i)
+	{
+		quadsInRow[i].number = currentQuadIndex;
+		currentQuadIndex++;
+	}
+	q18.number = 18;
+	currentQuadIndex = 19;
+
+	// Number the two attached to q1 and q5
+	int indexQ19 = -1;
+	int indexQ23 = -1;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (q15.associatedCorners[i].first != -1)
+		{
+			if (quads[q15.associatedCorners[i].second].number == 0)
+			{
+				if (quads[q15.associatedCorners[i].second].centre.y > q15.centre.y)
+				{
+					quads[q15.associatedCorners[i].second].number = 19;
+					indexQ19 = i;
+				}
+			}
+		}
+		if (q18.associatedCorners[i].first != -1)
+		{
+			if (quads[q18.associatedCorners[i].second].number == 0)
+			{
+				if (quads[q18.associatedCorners[i].second].centre.y > q18.centre.y)
+				{
+					quads[q18.associatedCorners[i].second].number = 23;
+					indexQ23 = i;
+				}
+			}
+		}
+	}
+	if (indexQ19 == -1 || indexQ23 == -1)
+	{
+		// we failed? Return. SHould have an error code. At least false?
+		return;
+	}
+
+	// Next row
+	Quad& q19 = quads[q1.associatedCorners[indexQ19].second];
+	Quad& q23 = quads[q5.associatedCorners[indexQ23].second];
+	// Draw a line between the two
+	l.p1 = q19.centre;
+	l.p2 = q23.centre;
+
+	bound = GetLongestDiagonal(q19) / 2;
+	quadsInRow.clear();
+	for (Quad& q : quads)
+	{
+		float d = abs(PointDistToLineSigned(q.centre, q19.centre, q23.centre));
+		if (d < bound)
+		{
+			quadsInRow.push_back(q);
+		}
+	}
+	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// Number
+	for (int i = 0; i < quadsInRow.size(); ++i)
+	{
+		quadsInRow[i].number = currentQuadIndex;
+		currentQuadIndex++;
+	}
+	q23.number = 23;
+	currentQuadIndex = 24;
+
+	// Number the two attached to q1 and q5
+	int indexQ24 = -1;
+	int indexQ27 = -1;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (q19.associatedCorners[i].first != -1)
+		{
+			if (quads[q19.associatedCorners[i].second].number == 0)
+			{
+				if (quads[q19.associatedCorners[i].second].centre.y > q19.centre.y)
+				{
+					quads[q19.associatedCorners[i].second].number = 24;
+					indexQ24 = i;
+				}
+			}
+		}
+		if (q23.associatedCorners[i].first != -1)
+		{
+			if (quads[q23.associatedCorners[i].second].number == 0)
+			{
+				if (quads[q23.associatedCorners[i].second].centre.y > q23.centre.y)
+				{
+					quads[q23.associatedCorners[i].second].number = 27;
+					indexQ27 = i;
+				}
+			}
+		}
+	}
+	if (indexQ24 == -1 || indexQ27 == -1)
+	{
+		// we failed? Return. SHould have an error code. At least false?
+		return;
+	}
+
+	// Next row
+	Quad& q24 = quads[q1.associatedCorners[indexQ24].second];
+	Quad& q27 = quads[q5.associatedCorners[indexQ27].second];
+	// Draw a line between the two
+	l.p1 = q24.centre;
+	l.p2 = q27.centre;
+
+	bound = GetLongestDiagonal(q24) / 2;
+	quadsInRow.clear();
+	for (Quad& q : quads)
+	{
+		float d = abs(PointDistToLineSigned(q.centre, q24.centre, q27.centre));
+		if (d < bound)
+		{
+			quadsInRow.push_back(q);
+		}
+	}
+	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// Number
+	for (int i = 0; i < quadsInRow.size(); ++i)
+	{
+		quadsInRow[i].number = currentQuadIndex;
+		currentQuadIndex++;
+	}
+	q27.number = 27;
+	currentQuadIndex = 28;
+
+	// Number the two attached to q1 and q5
+	int indexQ28 = -1;
+	int indexQ32 = -1;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (q24.associatedCorners[i].first != -1)
+		{
+			if (quads[q24.associatedCorners[i].second].number == 28)
+			{
+				indexQ28 = i;
+			}
+		}
+		if (q18.associatedCorners[i].first != -1)
+		{
+			if (quads[q18.associatedCorners[i].second].number == 32)
+			{
+				indexQ32 = i;
+			}
+		}
+	}
+	if (indexQ28 == -1 || indexQ32 == -1)
+	{
+		// we failed? Return. SHould have an error code. At least false?
+		return;
+	}
+
+	// Final row
+	Quad& q28 = quads[q1.associatedCorners[indexQ28].second];
+	Quad& q32 = quads[q5.associatedCorners[indexQ32].second];
+	// Draw a line between the two
+	l.p1 = q28.centre;
+	l.p2 = q32.centre;
+
+	bound = GetLongestDiagonal(q28) / 2;
+	quadsInRow.clear();
+	for (Quad& q : quads)
+	{
+		float d = abs(PointDistToLineSigned(q.centre, q28.centre, q32.centre));
+		if (d < bound)
+		{
+			quadsInRow.push_back(q);
+		}
+	}
+	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// Number
+	for (int i = 0; i < quadsInRow.size(); ++i)
+	{
+		quadsInRow[i].number = currentQuadIndex;
+		currentQuadIndex++;
+	}
+	q32.number = 32;
 }
 
 /*
