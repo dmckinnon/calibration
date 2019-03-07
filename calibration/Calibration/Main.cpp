@@ -55,7 +55,7 @@ using namespace Eigen;
 	- Cannot get a good homography
 	- With a mildly inaccurate homography ... how do we number them correctly?
 	- Numbering - need to record indices
-	- Homography legit has a bug what the hell
+	- Homography solved. Now fix numbering
 
 	TODO:
 	- refinement

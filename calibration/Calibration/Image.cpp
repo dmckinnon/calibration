@@ -929,7 +929,7 @@ bool CompareQuadByCentreX(Quad a, Quad b)
 */
 bool CompareQuadByAngleToCentre(Quad a, Quad b)
 {
-	return a.angleToCentre < b.angleToCentre;
+	return a.angleToCentre > b.angleToCentre;
 }
 
 /*

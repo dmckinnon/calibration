@@ -36,6 +36,10 @@ float L2norm(Point a)
 {
 	return sqrt(a.x*a.x + a.y*a.y);
 }
+float L2norm(Point2f a)
+{
+	return sqrt(a.x*a.x + a.y*a.y);
+}
 // Actual Function
 bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 {
@@ -468,7 +472,10 @@ int FindCornerFromEdgeQuad(const Quad& root, const Quad& branch, vector<Quad>& q
 */
 // Helper
 // just do reprojection error from the corner centres
-float GetReprojectionError(const Quad gtCorners[], const vector<Quad> corners, int indices[], const Matrix3f& H)
+float GetReprojectionError(const vector<Quad>& gtQuads, const vector<Quad>& quads,
+	                       const Quad gtCorners[], const Point2f gtSize,
+	                       const Point2f size, const vector<Quad> corners, 
+	                       vector<int> indices, const Matrix3f& H)
 {
 
 	// Find the closest quad in gt set and get error
@@ -480,10 +487,32 @@ float GetReprojectionError(const Quad gtCorners[], const vector<Quad> corners, i
 
 		Vector3f x(q2.centre.x, q2.centre.y, 1);
 		Vector3f Hx = H * x;
-		Hx / Hx(2);
-		auto newQ2centre = Point2f(Hx(0), Hx(1));
+		Hx /= Hx(2);
+		auto newQ2centre = Point2f(Hx(0)*gtSize.x, Hx(1)*gtSize.y);
 
 		e += L2norm(q1.centre - newQ2centre);
+
+		// INclude in the reprojection error the difference between the quads
+		// that each of these connect to
+		Quad q1_1, q2_1;
+		for (int j = 0; j < 4; ++j)
+		{
+			if (q1.associatedCorners[j].second != -1)
+			{
+				q1_1 = gtQuads[q1.associatedCorners[j].second];
+			}
+			if (q2.associatedCorners[j].second != -1)
+			{
+				q2_1 = quads[q2.associatedCorners[j].second];
+			}
+		}
+
+		Vector3f x2(q2_1.centre.x/size.x, q2_1.centre.y/size.y, 1);
+		Vector3f Hx2 = H * x2;
+		Hx2 /= Hx2(2);
+		auto newQ1_1centre = Point2f(Hx2(0)*gtSize.x, Hx2(1)*gtSize.y);
+
+		e += L2norm(q1_1.centre - newQ1_1centre);
 	}
 
 	return e;
@@ -549,14 +578,6 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		}
 	}
 
-	Mat temp2 = img.clone();
-	for (int i = 0; i < corners.size(); ++i)
-	{
-		circle(temp2, corners[i].centre, 20, (128, 128, 128), -1);
-	}
-	// Debug display
-	imshow("corners in captured", temp2);
-	waitKey(0);
 
 	Mat temp3 = checkerboard.clone();
 	rectangle(temp3, topleft.points[0], topleft.centre, (128, 128, 128), 1);
@@ -611,7 +632,18 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		corners[1].angleToCentre = atan2(centre.y - corners[1].centre.y, corners[1].centre.x - centre.x) * 180 / PI;
 		corners[2].angleToCentre = atan2(centre.y - corners[2].centre.y, corners[2].centre.x - centre.x) * 180 / PI;
 		corners[3].angleToCentre = atan2(centre.y - corners[3].centre.y, corners[3].centre.x - centre.x) * 180 / PI;
+
+		// get them clockwise, not anticlockwise
 		sort(corners.begin(), corners.end(), CompareQuadByAngleToCentre);
+
+		/*Mat temp2 = img.clone();
+		for (int i = 0; i < corners.size(); ++i)
+		{
+			circle(temp2, corners[i].centre, 20 + 10*i, (128, 128, 128), -1);
+		}
+		// Debug display
+		imshow("corners in captured", temp2);
+		waitKey(0);*/
 
 		// This gives us only four possibilities, of which only two should work
 		corners[0].centre.x = (float)corners[0].centre.x/(float)img.cols;
@@ -639,8 +671,8 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			vector<pair<Point2f, Point2f>> matches;
 			matches.push_back(pair<Point2f, Point2f>(corners[i].centre, topleft.centre));
 			matches.push_back(pair<Point2f, Point2f>(corners[(i+1)%4].centre, topright.centre));
-			matches.push_back(pair<Point2f, Point2f>(corners[(i+2)%4].centre, bottomleft.centre));
-			matches.push_back(pair<Point2f, Point2f>(corners[(i+3)%4].centre, bottomright.centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+2)%4].centre, bottomright.centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+3)%4].centre, bottomleft.centre));
 
 			cout << "Matches this round are: " << endl;
 			for (auto m : matches)
@@ -658,6 +690,10 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 
 			// DEBUG
 			// Draw the homographied quads
+
+			// Why are only some of my quads appearing?
+			// Could do RANSAC ... but why, if I have the corners perfectly? These should give me a perfect homography
+
 			Mat temp3 = checkerboard.clone(); // checkerboard
 			for (Quad q : quads) // quads
 			{
@@ -681,8 +717,8 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			// Update reprojection error
 
 			// Transform all captured quads with H
-			int indices[] = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
-			float e = GetReprojectionError(gtCorners, corners, indices, h);
+			vector<int> indices = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
+			float e = GetReprojectionError(gtQuads, quads, gtCorners, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), corners, indices, h);
   			if (e < minError)
 			{
 				minError = e;
@@ -736,7 +772,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 
 		// For simplicity, throw it away
 		// we'll see how well we do on other images
-		return false;
+ 		return false;
 	}
 	else
 	{
@@ -747,13 +783,18 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	Mat temp6 = checkerboard.clone();
 	for (Quad q : quads)
 	{
-		// NEED TO NORMALISE
-		Vector3f x(q.centre.x, q.centre.y, 1);
+		Vector3f x(q.centre.x / (float)img.cols, q.centre.y / (float)img.rows, 1);
 		Vector3f Hx = H * x;
-		Hx / Hx(2);
-		auto centre = Point(Hx(0), Hx(1));
+		Hx /= Hx(2);
+		auto centre = Point2f(Hx(0), Hx(1));
 
+		centre.x *= (float)temp6.cols;
+		centre.y *= (float)temp6.rows;
 
+		if (!IsInBounds(temp6.rows, temp6.cols, centre))
+		{
+			continue;
+		}
 
 		circle(temp6, centre, 20, (128, 128, 128), -1);
 	}
