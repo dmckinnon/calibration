@@ -919,9 +919,9 @@ int PointDistToLineSigned(const Point& p, const Point& p1, const Point& p2)
 /*
 	Comparator for quads, ordering by x coord of centre
 */
-bool CompareQuadByCentreX(Quad a, Quad b)
+bool CompareQuadByCentreX(Quad* a, Quad* b)
 {
-	return a.centre.x < b.centre.x;
+	return a->centre.x < b->centre.x;
 }
 
 /*

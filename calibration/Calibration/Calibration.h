@@ -33,4 +33,4 @@ bool ComputeIntrinsicsAndExtrinsicFromHomography(const Eigen::Matrix3f& H, Eigen
 
 bool GetHomographyAndMatchQuads(Eigen::Matrix3f& H, const cv::Mat& img, const cv::Mat& checkerboard, std::vector<Quad>& gtQuads, std::vector<Quad>& quads);
 
-void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads);
+void TransformAndNumberQuads(const Eigen::Matrix3f& H, const cv::Point2f gtSize, const cv::Point2f size, std::vector<Quad>& quads);

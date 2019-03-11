@@ -84,7 +84,7 @@ float DistBetweenPoints(const cv::Point& p1, const cv::Point& p2);
 int PointDistToLineSigned(const cv::Point& p, const cv::Point& p1, const cv::Point& p2);
 
 // Compare quads
-bool CompareQuadByCentreX(Quad a, Quad b);
+bool CompareQuadByCentreX(Quad* a, Quad* b);
 bool CompareQuadByAngleToCentre(Quad a, Quad b);
 
 //  Intersection of two lines

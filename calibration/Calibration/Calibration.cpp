@@ -488,9 +488,12 @@ float GetReprojectionError(const vector<Quad>& gtQuads, const vector<Quad>& quad
 		Vector3f x(q2.centre.x, q2.centre.y, 1);
 		Vector3f Hx = H * x;
 		Hx /= Hx(2);
+		// Put everything into the same coordinates
 		auto newQ2centre = Point2f(Hx(0)*gtSize.x, Hx(1)*gtSize.y);
+		auto newQ1centre = Point2f(q1.centre.x*gtSize.x, q1.centre.y*gtSize.y);
 
-		e += L2norm(q1.centre - newQ2centre);
+		// This is in normalise
+		e += L2norm(newQ1centre - newQ2centre);
 
 		// INclude in the reprojection error the difference between the quads
 		// that each of these connect to
@@ -531,7 +534,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	Quad topright = gtQuads[0];
 	Quad bottomleft = gtQuads[0];
 	Quad bottomright = gtQuads[0];
-	for (Quad& q : gtQuads)
+	for (Quad q : gtQuads)
 	{
 		// topleft
 		if ((float)q.centre.x < topleft.centre.x*0.9f || (float)q.centre.y < topleft.centre.y*0.9f)
@@ -554,7 +557,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			bottomright = q;
 		}
 	}
-	Quad gtCorners[4] = {topleft, topright, bottomleft, bottomright};
+	Quad gtCorners[4] = {topleft, topright, bottomright, bottomleft};
 
 	// reiterate, just in case it was overwritten
 	topleft.number = 1;
@@ -578,53 +581,8 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		}
 	}
 
-
-	Mat temp3 = checkerboard.clone();
-	rectangle(temp3, topleft.points[0], topleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, topleft.points[1], topleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, topleft.points[2], topleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, topleft.points[3], topleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, topright.points[0], topright.centre, (128, 128, 128), 1);
-	rectangle(temp3, topright.points[1], topright.centre, (128, 128, 128), 1);
-	rectangle(temp3, topright.points[2], topright.centre, (128, 128, 128), 1);
-	rectangle(temp3, topright.points[3], topright.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomleft.points[0], bottomleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomleft.points[1], bottomleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomleft.points[2], bottomleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomleft.points[3], bottomleft.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomright.points[0], bottomright.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomright.points[1], bottomright.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomright.points[2], bottomright.centre, (128, 128, 128), 1);
-	rectangle(temp3, bottomright.points[3], bottomright.centre, (128, 128, 128), 1);
-	// Debug display
-	imshow("corners in gt", temp3);
-	waitKey(0);
-
-
-	// New, easier idea:
-	// Try every combination of fitting the gt corners to the captured corners
-	// if we have fewer than four, then either only use two corner checkers, but use four of their points
-	// or find a fourth checker by using a connecting one, and dsearching for a captured checker with 3 connections
-	//
-	// Pick a combination - create a homography. 
-	// If homography, test it
-	// warp all corners, and find the reprojection error
-	// Pick the H with the smallest reprojection error
-
 	if (corners.size() == 4)
 	{
-		// normalise all the points
-		topleft.centre.x /= (float)checkerboard.cols;
-		topleft.centre.y /= (float)checkerboard.rows;
-		topright.centre.x /= (float)checkerboard.cols;
-		topright.centre.y /= (float)checkerboard.rows;
-		bottomright.centre.x /= (float)checkerboard.cols;
-		bottomright.centre.y /= (float)checkerboard.rows;
-		bottomleft.centre.x /= (float)checkerboard.cols;
-		bottomleft.centre.y /= (float)checkerboard.rows;
-
-		// TODO: accept floats in points
-
 		// We have all four corners.
 		// Order them in increasing angle relative to horizontal from centre
 		Point centre(img.cols/2, img.rows/2);
@@ -636,27 +594,16 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		// get them clockwise, not anticlockwise
 		sort(corners.begin(), corners.end(), CompareQuadByAngleToCentre);
 
-		/*Mat temp2 = img.clone();
-		for (int i = 0; i < corners.size(); ++i)
-		{
-			circle(temp2, corners[i].centre, 20 + 10*i, (128, 128, 128), -1);
-		}
-		// Debug display
-		imshow("corners in captured", temp2);
-		waitKey(0);*/
-
 		// This gives us only four possibilities, of which only two should work
-		corners[0].centre.x = (float)corners[0].centre.x/(float)img.cols;
-		corners[0].centre.y /= (float)img.rows;
-		corners[1].centre.x /= (float)img.cols;
-		corners[1].centre.y /= (float)img.rows;
-		corners[2].centre.x /= (float)img.cols;
-		corners[2].centre.y /= (float)img.rows;
-		corners[3].centre.x /= (float)img.cols;
-		corners[3].centre.y /= (float)img.rows;
+		// Normalise the points for the homography matching
+		for (int j = 0; j < 4; ++j)
+		{
+			corners[j].centre.x /= (float)img.cols;
+			corners[j].centre.y /= (float)img.rows;
 
-		// Test all 24 possibilities for minimal reprojection error
-		
+			gtCorners[j].centre.x /= (float)checkerboard.cols;
+			gtCorners[j].centre.y /= (float)checkerboard.rows;
+		}
 
 		// Iterate over all permutations
 		float minError = 100000000;
@@ -664,22 +611,11 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		Matrix3f homography;
 		for (int i = 0; i < 4; ++i)
 		{
-
-		//}
-		//do {
-			// the gt corners 0,1,2,3 are associated with indices[0],[1],[2],[3] of captured corners
 			vector<pair<Point2f, Point2f>> matches;
-			matches.push_back(pair<Point2f, Point2f>(corners[i].centre, topleft.centre));
-			matches.push_back(pair<Point2f, Point2f>(corners[(i+1)%4].centre, topright.centre));
-			matches.push_back(pair<Point2f, Point2f>(corners[(i+2)%4].centre, bottomright.centre));
-			matches.push_back(pair<Point2f, Point2f>(corners[(i+3)%4].centre, bottomleft.centre));
-
-			cout << "Matches this round are: " << endl;
-			for (auto m : matches)
-			{
-				cout << "\t" << m.first << " <-> " << m.second << endl;
-				
-			}
+			matches.push_back(pair<Point2f, Point2f>(corners[i].centre, gtCorners[0].centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+1)%4].centre, gtCorners[1].centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+2)%4].centre, gtCorners[2].centre));
+			matches.push_back(pair<Point2f, Point2f>(corners[(i+3)%4].centre, gtCorners[3].centre));
 
 			Matrix3f h;
 			if (!GetHomographyFromMatches(matches, h))
@@ -688,35 +624,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 				continue;
 			}
 
-			// DEBUG
-			// Draw the homographied quads
-
-			// Why are only some of my quads appearing?
-			// Could do RANSAC ... but why, if I have the corners perfectly? These should give me a perfect homography
-
-			Mat temp3 = checkerboard.clone(); // checkerboard
-			for (Quad q : quads) // quads
-			{
-				Vector3f x(q.centre.x/(float)img.cols, q.centre.y / (float)img.rows, 1);
-				Vector3f Hx = h * x;
-				Hx /= Hx(2);
-				auto centre = Point2f(Hx(0), Hx(1));
-
-				centre.x *= (float)temp3.cols;
-				centre.y *= (float)temp3.rows;
-
-				circle(temp3, Point((int)centre.x, (int)centre.y), 20, (128, 128, 128), CV_FILLED);
-			} 
-			// Debug display
-			imshow("homography", temp3);
-			waitKey(0);
-			
-
-
-			// NOW FIX THIS
-			// Update reprojection error
-
-			// Transform all captured quads with H
+			// How mcuh error did this iteration get?
 			vector<int> indices = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
 			float e = GetReprojectionError(gtQuads, quads, gtCorners, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), corners, indices, h);
   			if (e < minError)
@@ -728,8 +636,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 				perm[3] = indices[3];
 				homography = h;
 			}
-
-		}// while (std::next_permutation(indices, indices + 4));
+		}
 
 		if (minError == 100000000)
 		{
@@ -737,8 +644,9 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			return false;
 		}
 
+#ifdef DEBUG
 		cout << "The minimum error was " << minError << endl;
-
+#endif
 		H = homography;
 
 		for (Quad& q : quads)
@@ -760,10 +668,6 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 				q.number = 32;
 			}
 		}
-		//corners[perm[0]].number = 1;
-		//corners[perm[1]].number = 5;
-		//corners[perm[2]].number = 28;
-		//corners[perm[3]].number = 32;
 	}
 	else if (corners.size() == 3 || corners.size() == 2)
 	{
@@ -780,6 +684,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		return false;
 	}
 
+#ifdef DEBUG
 	Mat temp6 = checkerboard.clone();
 	for (Quad q : quads)
 	{
@@ -801,9 +706,10 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	// Debug display
 	imshow("Final homography", temp6);
 	waitKey(0);
+#endif
 
 	// Now number quads
-	TransformAndNumberQuads(H, quads);
+	TransformAndNumberQuads(H, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), quads);
 
 	return true;
 }
@@ -818,17 +724,17 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	or not another quad is in the same column or row
 
 */
-void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
+void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, const Point2f size, std::vector<Quad>& quads)
 {
 	int currentQuadIndex = 1;
 
 	// First, transform all quads
 	for (Quad& q : quads)
 	{
-		Vector3f x(q.centre.x, q.centre.y, 1);
+		Vector3f x(q.centre.x / size.x, q.centre.y / size.y, 1);
 		Vector3f Hx = H * x;
-		Hx / Hx(2);
-		q.centre = Point(Hx(0), Hx(1));
+		Hx /= Hx(2);
+		q.centre = Point2f(Hx(0)*gtSize.x, Hx(1)*gtSize.y);
 	}
 
 	// Second, copy vector locally for modification
@@ -867,48 +773,60 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 
 	// Find the three other quads whose centres lie within half a diagonal's length of the line
 	float bound = GetLongestDiagonal(q1)/2;
-	vector<Quad> quadsInRow; // TODO
-	for (Quad& q : quads)
+	vector<Quad*> quadsInRow;
+	// make this a list of indices
+	for (int i = 0; i < quads.size(); ++i)
 	{
-		float d = abs(PointDistToLineSigned(q.centre, q1.centre, q5.centre));
+		float d = abs(PointDistToLineSigned(quads[i].centre, q1.centre, q5.centre));
 		if (d < bound)
 		{
-			quadsInRow.push_back(q);
+			quadsInRow.push_back(&quads[i]);
 		}
 	}
 
 	// Order all these quads by x coord
+	// TODO: implement insertion sort
+	// TODO: replace throughout function
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
 
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
-		quadsInRow[i].number = currentQuadIndex;
+		quadsInRow[i]->number = currentQuadIndex;
 		currentQuadIndex++;
 	}
 	q5.number = 5;
 	currentQuadIndex = 6;
 
 	// Number the two attached to q1 and q5
-	int indexQ6 = 0;
-	int indexQ9 = 0;
-	for (int i = 0; i < 4; ++i)
+	int indexQ6 = -1;
+	int indexQ9 = -1;
+	for (int n = 0; n < quads.size(); ++n)
 	{
-		if (q1.associatedCorners[i].first != -1)
+		for (int i = 0; i < 4; ++i)
 		{
-			quads[q1.associatedCorners[i].second].number = 6;
-			indexQ6 = i;
-		}
-		if (q5.associatedCorners[i].first != -1)
-		{
-			quads[q5.associatedCorners[i].second].number = 9;
-			indexQ9 = i;
+			if (q1.associatedCorners[i].first != -1)
+			{
+				if (q1.associatedCorners[i].first == quads[n].id)
+					indexQ6 = n;
+			}
+			if (q5.associatedCorners[i].first != -1)
+			{
+				if (q5.associatedCorners[i].first == quads[n].id)
+					indexQ9 = n;
+			}
 		}
 	}
 
+	// Precautionary
+	if (indexQ6 == -1 || indexQ9 == -1)
+	{
+		return;
+	}
+
 	// Next row
-	Quad& q6 = quads[q1.associatedCorners[indexQ6].second];
-	Quad& q9 = quads[q5.associatedCorners[indexQ9].second];
+	Quad& q6 = quads[indexQ6];
+	Quad& q9 = quads[indexQ9];
 	// Draw a line between the two
 	l.p1 = q6.centre;
 	l.p2 = q9.centre;
@@ -920,7 +838,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 		float d = abs(PointDistToLineSigned(q.centre, q6.centre, q9.centre));
 		if (d < bound)
 		{
-			quadsInRow.push_back(q);
+			quadsInRow.push_back(&q);
 		}
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
@@ -928,7 +846,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
-		quadsInRow[i].number = currentQuadIndex;
+		quadsInRow[i]->number = currentQuadIndex;
 		currentQuadIndex++;
 	}
 	q9.number = 9;
@@ -937,27 +855,30 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number the two attached to q1 and q5
 	int indexQ10 = -1;
 	int indexQ14 = -1;
-	for (int i = 0; i < 4; ++i)
+	for (int n = 0; n < quads.size(); ++n)
 	{
-		if (q6.associatedCorners[i].first != -1)
+		for (int i = 0; i < 4; ++i)
 		{
-			if (quads[q6.associatedCorners[i].second].number == 0)
+			if (q6.associatedCorners[i].first != -1)
 			{
-				if (quads[q6.associatedCorners[i].second].centre.y > q6.centre.y && quads[q6.associatedCorners[i].second].centre.x < q6.centre.x)
+				if (q6.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q6.associatedCorners[i].second].number = 10;
-					indexQ10 = i;
+					if (quads[n].centre.y > q6.centre.y && quads[n].centre.x < q6.centre.x)
+					{
+						quads[n].number = 10;
+						indexQ10 = n;
+					}
 				}
 			}
-		}
-		if (q9.associatedCorners[i].first != -1)
-		{
-			if (quads[q9.associatedCorners[i].second].number == 0)
+			if (q9.associatedCorners[i].first != -1)
 			{
-				if (quads[q9.associatedCorners[i].second].centre.y > q9.centre.y)
+				if (q9.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q9.associatedCorners[i].second].number = 14;
-					indexQ14 = i;
+					if (quads[n].centre.y > q9.centre.y  && quads[n].centre.x > q6.centre.x)
+					{
+						quads[n].number = 14;
+						indexQ14 = n;
+					}
 				}
 			}
 		}
@@ -969,8 +890,8 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	}
 
 	// Next row
-	Quad& q10 = quads[q1.associatedCorners[indexQ10].second];
-	Quad& q14 = quads[q5.associatedCorners[indexQ14].second];
+	Quad& q10 = quads[indexQ10];
+	Quad& q14 = quads[indexQ14];
 	// Draw a line between the two
 	l.p1 = q10.centre;
 	l.p2 = q14.centre;
@@ -982,7 +903,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 		float d = abs(PointDistToLineSigned(q.centre, q10.centre, q14.centre));
 		if (d < bound)
 		{
-			quadsInRow.push_back(q);
+			quadsInRow.push_back(&q);
 		}
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
@@ -990,7 +911,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
-		quadsInRow[i].number = currentQuadIndex;
+		quadsInRow[i]->number = currentQuadIndex;
 		currentQuadIndex++;
 	}
 	q14.number = 14;
@@ -999,31 +920,35 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number the two attached to q1 and q5
 	int indexQ15 = -1;
 	int indexQ18 = -1;
-	for (int i = 0; i < 4; ++i)
+	for (int n = 0; n < quads.size(); ++n)
 	{
-		if (q10.associatedCorners[i].first != -1)
+		for (int i = 0; i < 4; ++i)
 		{
-			if (quads[q10.associatedCorners[i].second].number == 0)
+			if (q10.associatedCorners[i].first != -1)
 			{
-				if (quads[q10.associatedCorners[i].second].centre.y > q10.centre.y)
+				if (q10.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q10.associatedCorners[i].second].number = 15;
-					indexQ15 = i;
+					if (quads[n].centre.y > q10.centre.y)
+					{
+						quads[n].number = 15;
+						indexQ15 = n;
+					}
 				}
 			}
-		}
-		if (q14.associatedCorners[i].first != -1)
-		{
-			if (quads[q14.associatedCorners[i].second].number == 0)
+			if (q14.associatedCorners[i].first != -1)
 			{
-				if (quads[q14.associatedCorners[i].second].centre.y > q14.centre.y)
+				if (q14.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q14.associatedCorners[i].second].number = 18;
-					indexQ18 = i;
+					if (quads[n].centre.y > q14.centre.y)
+					{
+						quads[n].number = 18;
+						indexQ18 = n;
+					}
 				}
 			}
 		}
 	}
+
 	if (indexQ15 == -1 || indexQ18 == -1)
 	{
 		// we failed? Return. SHould have an error code. At least false?
@@ -1031,8 +956,8 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	}
 
 	// Next row
-	Quad& q15 = quads[q1.associatedCorners[indexQ15].second];
-	Quad& q18 = quads[q5.associatedCorners[indexQ18].second];
+	Quad& q15 = quads[indexQ15];
+	Quad& q18 = quads[indexQ18];
 	// Draw a line between the two
 	l.p1 = q15.centre;
 	l.p2 = q18.centre;
@@ -1044,7 +969,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 		float d = abs(PointDistToLineSigned(q.centre, q15.centre, q18.centre));
 		if (d < bound)
 		{
-			quadsInRow.push_back(q);
+			quadsInRow.push_back(&q);
 		}
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
@@ -1052,7 +977,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
-		quadsInRow[i].number = currentQuadIndex;
+		quadsInRow[i]->number = currentQuadIndex;
 		currentQuadIndex++;
 	}
 	q18.number = 18;
@@ -1061,27 +986,30 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number the two attached to q1 and q5
 	int indexQ19 = -1;
 	int indexQ23 = -1;
-	for (int i = 0; i < 4; ++i)
+	for (int n = 0; n < quads.size(); ++n)
 	{
-		if (q15.associatedCorners[i].first != -1)
+		for (int i = 0; i < 4; ++i)
 		{
-			if (quads[q15.associatedCorners[i].second].number == 0)
+			if (q15.associatedCorners[i].first != -1)
 			{
-				if (quads[q15.associatedCorners[i].second].centre.y > q15.centre.y)
+				if (q15.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q15.associatedCorners[i].second].number = 19;
-					indexQ19 = i;
+					if (quads[n].centre.y > q15.centre.y && quads[n].centre.x < q15.centre.x)
+					{
+						quads[n].number = 19;
+						indexQ19 = n;
+					}
 				}
 			}
-		}
-		if (q18.associatedCorners[i].first != -1)
-		{
-			if (quads[q18.associatedCorners[i].second].number == 0)
+			if (q18.associatedCorners[i].first != -1)
 			{
-				if (quads[q18.associatedCorners[i].second].centre.y > q18.centre.y)
+				if (q18.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q18.associatedCorners[i].second].number = 23;
-					indexQ23 = i;
+					if (quads[n].centre.y > q18.centre.y && quads[n].centre.x > q18.centre.x)
+					{
+						quads[n].number = 23;
+						indexQ23 = n;
+					}
 				}
 			}
 		}
@@ -1093,8 +1021,8 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	}
 
 	// Next row
-	Quad& q19 = quads[q1.associatedCorners[indexQ19].second];
-	Quad& q23 = quads[q5.associatedCorners[indexQ23].second];
+	Quad& q19 = quads[indexQ19];
+	Quad& q23 = quads[indexQ23];
 	// Draw a line between the two
 	l.p1 = q19.centre;
 	l.p2 = q23.centre;
@@ -1106,7 +1034,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 		float d = abs(PointDistToLineSigned(q.centre, q19.centre, q23.centre));
 		if (d < bound)
 		{
-			quadsInRow.push_back(q);
+			quadsInRow.push_back(&q);
 		}
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
@@ -1114,7 +1042,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
-		quadsInRow[i].number = currentQuadIndex;
+		quadsInRow[i]->number = currentQuadIndex;
 		currentQuadIndex++;
 	}
 	q23.number = 23;
@@ -1123,27 +1051,30 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number the two attached to q1 and q5
 	int indexQ24 = -1;
 	int indexQ27 = -1;
-	for (int i = 0; i < 4; ++i)
+	for (int n = 0; n < quads.size(); ++n)
 	{
-		if (q19.associatedCorners[i].first != -1)
+		for (int i = 0; i < 4; ++i)
 		{
-			if (quads[q19.associatedCorners[i].second].number == 0)
+			if (q19.associatedCorners[i].first != -1)
 			{
-				if (quads[q19.associatedCorners[i].second].centre.y > q19.centre.y)
+				if (q19.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q19.associatedCorners[i].second].number = 24;
-					indexQ24 = i;
+					if (quads[n].centre.y > q19.centre.y)
+					{
+						quads[n].number = 24;
+						indexQ24 = n;
+					}
 				}
 			}
-		}
-		if (q23.associatedCorners[i].first != -1)
-		{
-			if (quads[q23.associatedCorners[i].second].number == 0)
+			if (q23.associatedCorners[i].first != -1)
 			{
-				if (quads[q23.associatedCorners[i].second].centre.y > q23.centre.y)
+				if (q23.associatedCorners[i].first == quads[n].id)
 				{
-					quads[q23.associatedCorners[i].second].number = 27;
-					indexQ27 = i;
+					if (quads[n].centre.y > q23.centre.y)
+					{
+						quads[n].number = 27;
+						indexQ27 = n;
+					}
 				}
 			}
 		}
@@ -1155,8 +1086,8 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	}
 
 	// Next row
-	Quad& q24 = quads[q1.associatedCorners[indexQ24].second];
-	Quad& q27 = quads[q5.associatedCorners[indexQ27].second];
+	Quad& q24 = quads[indexQ24];
+	Quad& q27 = quads[indexQ27];
 	// Draw a line between the two
 	l.p1 = q24.centre;
 	l.p2 = q27.centre;
@@ -1168,7 +1099,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 		float d = abs(PointDistToLineSigned(q.centre, q24.centre, q27.centre));
 		if (d < bound)
 		{
-			quadsInRow.push_back(q);
+			quadsInRow.push_back(&q);
 		}
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
@@ -1176,7 +1107,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
-		quadsInRow[i].number = currentQuadIndex;
+		quadsInRow[i]->number = currentQuadIndex;
 		currentQuadIndex++;
 	}
 	q27.number = 27;
@@ -1185,20 +1116,31 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number the two attached to q1 and q5
 	int indexQ28 = -1;
 	int indexQ32 = -1;
-	for (int i = 0; i < 4; ++i)
+	for (int n = 0; n < quads.size(); ++n)
 	{
-		if (q24.associatedCorners[i].first != -1)
+		for (int i = 0; i < 4; ++i)
 		{
-			if (quads[q24.associatedCorners[i].second].number == 28)
+			if (q24.associatedCorners[i].first != -1)
 			{
-				indexQ28 = i;
+				if (q24.associatedCorners[i].first == quads[n].id)
+				{
+					if (quads[n].centre.y > q24.centre.y && quads[n].centre.x < q24.centre.x)
+					{
+						quads[n].number = 28;
+						indexQ28 = n;
+					}
+				}
 			}
-		}
-		if (q18.associatedCorners[i].first != -1)
-		{
-			if (quads[q18.associatedCorners[i].second].number == 32)
+			if (q27.associatedCorners[i].first != -1)
 			{
-				indexQ32 = i;
+				if (q27.associatedCorners[i].first == quads[n].id)
+				{
+					if (quads[n].centre.y > q27.centre.y && quads[n].centre.x > q27.centre.x)
+					{
+						quads[n].number = 32;
+						indexQ32 = n;
+					}
+				}
 			}
 		}
 	}
@@ -1209,8 +1151,8 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	}
 
 	// Final row
-	Quad& q28 = quads[q1.associatedCorners[indexQ28].second];
-	Quad& q32 = quads[q5.associatedCorners[indexQ32].second];
+	Quad& q28 = quads[indexQ28];
+	Quad& q32 = quads[indexQ32];
 	// Draw a line between the two
 	l.p1 = q28.centre;
 	l.p2 = q32.centre;
@@ -1222,7 +1164,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 		float d = abs(PointDistToLineSigned(q.centre, q28.centre, q32.centre));
 		if (d < bound)
 		{
-			quadsInRow.push_back(q);
+			quadsInRow.push_back(&q);
 		}
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
@@ -1230,7 +1172,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, std::vector<Quad>& quads)
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
-		quadsInRow[i].number = currentQuadIndex;
+		quadsInRow[i]->number = currentQuadIndex;
 		currentQuadIndex++;
 	}
 	q32.number = 32;

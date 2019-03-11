@@ -141,7 +141,7 @@ int main(int argc, char** argv)
 	gtQuads[topright].number = 5;
 	gtQuads[bottomleft].number = 28;
 	gtQuads[bottomright].number = 32;
-	//TransformAndNumberQuads(I, gtQuads);
+	TransformAndNumberQuads(I, Point2f(checkerboard.cols, checkerboard.rows), Point2f(checkerboard.cols, checkerboard.rows), gtQuads);
 
 
 	// DEBUG
@@ -262,6 +262,7 @@ int main(int argc, char** argv)
 		Mat temp3 = checkerboard.clone();
 		for (Quad q : quads)
 		{
+
 			putText(temp3, std::to_string(q.number), q.centre,
 				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
 
