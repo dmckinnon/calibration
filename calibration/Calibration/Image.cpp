@@ -260,6 +260,11 @@ bool PixelIsAdjacentToWhite(const Mat& input, const Point& p)
 {
 	for (int i = 0; i < Contour::NUM_DIRS; ++i)
 	{
+		if (!IsInBounds(input.rows, input.cols, p + dirs[i]))
+		{
+			continue;
+		}
+
 		auto pixel = input.at<uchar>(p + dirs[i]);
 		if (pixel == WHITE)
 		{
@@ -586,9 +591,11 @@ void DrawLine(const cv::Mat& input, const LineSegment l)
 		line(draw, pLeft, l.p1, (128, 128, 128), 1);
 	if (IsInBounds(input.rows, input.cols, pBottom))
 		line(draw, pBottom, l.p1, (128, 128, 128), 1);
+#ifdef DEBUG
 	namedWindow("lines", WINDOW_NORMAL);
 	imshow("lines", draw);
 	waitKey(0);
+#endif
 }
 
 /*
@@ -834,8 +841,10 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 
 			if (!CheckCornerValidity(c, corner))
 			{
+#ifdef DEBUG
 				DrawLine(img, lines[0]);
 				DrawLine(img, finalLine);
+#endif
 			}
 		}
 

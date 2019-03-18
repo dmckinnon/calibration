@@ -189,7 +189,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 		//destroyAllWindows();
 #endif
 	}
-
+#ifdef DEBUG
 	auto temp5 = checkerboard.clone();
 	for (Quad q : quads)
 	{
@@ -203,6 +203,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 	// Debug display
 	imshow("all quads", temp5);
 	waitKey(0);
+#endif
 	
 
 	// Link corners
@@ -708,8 +709,10 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	waitKey(0);
 #endif
 
+	// We just need the smallest projection error, really
+
 	// Now number quads
-	TransformAndNumberQuads(H, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), quads);
+	//TransformAndNumberQuads(H, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), quads);
 
 	return true;
 }
@@ -1256,28 +1259,28 @@ bool ComputeCalibration(const std::vector<Matrix3f>& estimates, Matrix3f& K)
 		VectorXf v22(6);
 
 		// i = j = 1
-		v11(0) = H(1, 1)*H(1, 1);
-		v11(1) = H(1, 1)*H(1, 2) + H(1, 2)*H(1, 1);
-		v11(2) = H(1, 2)*H(1, 2);
-		v11(3) = H(1, 3)*H(1, 1) + H(1, 1)*H(1, 3);
-		v11(4) = H(1, 3)*H(1, 2) + H(1, 2)*H(1, 3);
-		v11(5) = H(1, 3)*H(1, 3);
+		v11(0) = H(0, 0)*H(0, 0);
+		v11(1) = H(0, 0)*H(0, 1) + H(0, 1)*H(0, 0);
+		v11(2) = H(0, 1)*H(0, 1);
+		v11(3) = H(0, 2)*H(0, 0) + H(0, 0)*H(0, 2);
+		v11(4) = H(0, 2)*H(0, 1) + H(0, 1)*H(0, 2);
+		v11(5) = H(0, 2)*H(0, 2);
 
 		// i = 1. j = 2
-		v12(0) = H(1, 1)*H(2, 1);
-		v12(1) = H(1, 1)*H(2, 2) + H(1, 2)*H(2, 1);
-		v12(2) = H(1, 2)*H(2, 2);
-		v12(3) = H(1, 3)*H(2, 1) + H(1, 1)*H(2, 3);
-		v12(4) = H(1, 3)*H(2, 2) + H(1, 2)*H(2, 3);
-		v12(5) = H(1, 3)*H(2, 3);
+		v12(0) = H(0, 0)*H(1, 0);
+		v12(1) = H(0, 0)*H(1, 1) + H(0, 1)*H(1, 0);
+		v12(2) = H(0, 1)*H(1, 1);
+		v12(3) = H(0, 2)*H(1, 0) + H(0, 0)*H(1, 2);
+		v12(4) = H(0, 2)*H(1, 1) + H(0, 1)*H(1, 2);
+		v12(5) = H(0, 2)*H(1, 2);
 
 		// i = j = 2
-		v22(0) = H(2, 1)*H(2, 1);
-		v22(1) = H(2, 1)*H(2, 2) + H(2, 2)*H(2, 1);
-		v22(2) = H(2, 2)*H(2, 2);
-		v22(3) = H(2, 3)*H(2, 1) + H(2, 1)*H(2, 3);
-		v22(4) = H(2, 3)*H(2, 2) + H(2, 2)*H(2, 3);
-		v22(5) = H(2, 3)*H(2, 3);
+		v22(0) = H(1, 0)*H(1, 0);
+		v22(1) = H(1, 0)*H(1, 1) + H(1, 1)*H(1, 0);
+		v22(2) = H(1, 1)*H(1, 1);
+		v22(3) = H(1, 2)*H(1, 0) + H(1, 0)*H(1, 2);
+		v22(4) = H(1, 2)*H(1, 1) + H(1, 1)*H(1, 2);
+		v22(5) = H(1, 2)*H(1, 2);
 
 		// Use these to create the matrix V
 		// [  v_12 transpose         ] 
@@ -1311,9 +1314,9 @@ bool ComputeCalibration(const std::vector<Matrix3f>& estimates, Matrix3f& K)
 	// which is the last as singular values come well-ordered
 	// B = (B11, B12, B22, B13, B23, B33)
 	VectorXf B(6);
-	B << v(0, 6), v(1, 6), v(2, 6),
-		v(3, 6), v(4, 6), v(5, 6); // TODO - is this right?
-	
+	B << v(0, 5), v(1, 5), v(2, 5),
+		v(3, 5), v(4, 5), v(5, 5); // TODO - is this right?
+	cout << B << endl;
 	/*
 	Now that we have the parameters of B, compute parameters of K. 
 	This is using Zhang's equations from his Appendix B, 
@@ -1327,6 +1330,10 @@ bool ComputeCalibration(const std::vector<Matrix3f>& estimates, Matrix3f& K)
 	float skew = -B(1)*focalX*focalX*focalY/lambda;
 	float principalX = (skew*principalY/focalY) - B(3)*focalX*focalX/lambda;
 	
+	// TODO:
+	// SOmetimes getting NaN cos taking sqrt of negative
+	// Also getting wildly different numbers
+	// I think this is because the checker detection is not very consistent
 
 	K.setZero();
 	K(0, 0) = focalX;

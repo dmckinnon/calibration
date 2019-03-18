@@ -17,7 +17,7 @@ using namespace Eigen;
 
 #define CHECKERBOARD_FILENAME "checkerboard.jpg"
 
-#define DEBUG
+//#define DEBUG
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -55,7 +55,12 @@ using namespace Eigen;
 	- Check the math with homography decomposition
 
 	TODO:
-	- refinement
+	- Possibly do refinement on final result
+	- checker detection is pretty inconsistent
+	- sometimes getting sqrt of negative. P{resumably from when 
+	  we are numbering badly and getting a bad homography, throwing everything off.
+	  We need to use only good homographies
+	  Need to guarantee good checker detection
 	- Read P3P
 
 	LOG:
@@ -212,6 +217,7 @@ int main(int argc, char** argv)
 		}
 		cout << "Found " << quads.size() << " quads" << endl;
 
+#ifdef DEBUG
 		// DEBUG
 		// COnfirm that all the quads are good
 		Mat temp2 = img.clone();
@@ -241,6 +247,7 @@ int main(int argc, char** argv)
 		// Debug display
 		imshow("debug", temp2);
 		waitKey(0);
+#endif
 
 
 	
@@ -256,6 +263,7 @@ int main(int argc, char** argv)
 
 		// DEBUG
 		// Draw the homographied quads
+#ifdef DEBUG
 		Mat temp3 = checkerboard.clone();
 		for (Quad q : quads)
 		{
@@ -268,6 +276,7 @@ int main(int argc, char** argv)
 		// Debug display
 		imshow("Numbered and Hd", temp3);
 		waitKey(0);
+#endif
 
 		// Store
 		calibrationEstimates.push_back(H);
@@ -275,6 +284,7 @@ int main(int argc, char** argv)
 		// free the memory
  		img.release();
 	}
+	checkerboard.release();
 
 	// We need a minimum number of estimates for this to work
 	if (calibrationEstimates.size() < 3)
@@ -290,10 +300,27 @@ int main(int argc, char** argv)
 	{
 		// TODO:
 		// is K in the right coordinates?
-
+		cout << K << endl;
+		cout << K / K(2, 2) << endl;
 		// print K
 		// or save to a file
 	}
 
 	return 0;
 }
+
+/*
+actual focal length 4.26mm
+
+5.18265  1.39654 -11.9578
+0  8.34271 -1.56449
+0        0        1
+
+5.01724 0.0489705  -11.2865
+0   7.67657  -1.29967
+0         0         1
+
+8.19454 -0.128172  -30.0512
+0   17.6206  -7.91782
+0         0         1
+*/
