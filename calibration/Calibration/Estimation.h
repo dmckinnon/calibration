@@ -46,3 +46,4 @@ void TestRANSACLine();
 // Estimate a line from a series of points
 std::vector<cv::Point> FindLineInPointsRANSAC(const std::vector<cv::Point>& points, const int inlierSetSize,
 	                                          const int maxError, const int its, std::pair<cv::Point, cv::Point>& seedPoints);
+

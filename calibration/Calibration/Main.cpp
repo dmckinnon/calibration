@@ -52,10 +52,7 @@ using namespace Eigen;
 
 
 	Issues:
-	- Cannot get a good homography
-	- With a mildly inaccurate homography ... how do we number them correctly?
-	- Numbering - need to record indices
-	- Homography solved. Now fix numbering
+	- Check the math with homography decomposition
 
 	TODO:
 	- refinement
@@ -193,7 +190,7 @@ int main(int argc, char** argv)
 	// get an estimate of the calibration parameters and store these in a vector of calibration structures
 	// Each of these has a possible camera matrix and extrinsics
 	// By the end all these camera matrices should be the same
-	vector<Calibration> calibrationEstimates;
+	vector<Matrix3f> calibrationEstimates;
 	for (int image = 0; image < numImages; ++image)
 	{
 		// Read in the image
@@ -272,26 +269,8 @@ int main(int argc, char** argv)
 		imshow("Numbered and Hd", temp3);
 		waitKey(0);
 
-		// Decompose into K matrix and extrinsics
-		Matrix3f K, T;
-		cout << "Computing extrinsics and intrinsics" << endl;
-		if (!ComputeIntrinsicsAndExtrinsicFromHomography(H, K, T))
-		{
-			cout << "Failed to compute intrinsics for image " << image + 1 << endl;
-			continue;
-		}  
-
-		// number for debug
-
 		// Store
-		Calibration c;
-		c.quads = quads;
-		c.K = K;
-		c.R << T(0,0), T(0,1), T(0,2),
-			   T(1,0), T(1,1), T(1,2),
-			     0   ,    0  ,   0;
-		c.t << T(2, 0), T(2, 1), T(2, 2);
-		calibrationEstimates.push_back(c);
+		calibrationEstimates.push_back(H);
 
 		// free the memory
  		img.release();
@@ -304,8 +283,17 @@ int main(int argc, char** argv)
 		return 1;
 	}
 
-	/********************/
-	/* Refine estimates */
+	/************************/
+	/* Compuate calibration */
+	Matrix3f K;
+	if (ComputeCalibration(calibrationEstimates, K))
+	{
+		// TODO:
+		// is K in the right coordinates?
+
+		// print K
+		// or save to a file
+	}
 
 	return 0;
 }

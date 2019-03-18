@@ -13,20 +13,17 @@
 // structure for the calibration of a camera
 struct Calibration
 {
+	Eigen::Matrix3f H;
 	Eigen::Matrix3f K;
 	Eigen::Matrix3f R;
 	Eigen::Vector3f t;
 
 	std::vector<Quad> quads;
-
-	// And any other camera parameters
 };
 
 float L2norm(cv::Point a);
 
 /* Calibration functions */
-bool EnumerateCheckerboardCorners(std::vector<Feature>& features, cv::Point& size, const bool gt);
-
 bool CheckerDetection(const cv::Mat& checkerboard, std::vector<Quad>& quads, bool debug);
 
 bool ComputeIntrinsicsAndExtrinsicFromHomography(const Eigen::Matrix3f& H, Eigen::Matrix3f& K, Eigen::Matrix3f& T);
@@ -34,3 +31,5 @@ bool ComputeIntrinsicsAndExtrinsicFromHomography(const Eigen::Matrix3f& H, Eigen
 bool GetHomographyAndMatchQuads(Eigen::Matrix3f& H, const cv::Mat& img, const cv::Mat& checkerboard, std::vector<Quad>& gtQuads, std::vector<Quad>& quads);
 
 void TransformAndNumberQuads(const Eigen::Matrix3f& H, const cv::Point2f gtSize, const cv::Point2f size, std::vector<Quad>& quads);
+
+bool ComputeCalibration(const std::vector<Eigen::Matrix3f>& estimates, Eigen::Matrix3f& K);

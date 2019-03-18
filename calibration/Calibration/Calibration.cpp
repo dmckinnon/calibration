@@ -737,10 +737,6 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 		q.centre = Point2f(Hx(0)*gtSize.x, Hx(1)*gtSize.y);
 	}
 
-	// Second, copy vector locally for modification
-	vector<Quad> localQuads(quads);
-	vector<Quad> orderedQuads;
-
 	// Do each row separately, hardcoded
 	// Horrible, but hey it works. 
 
@@ -785,8 +781,6 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	}
 
 	// Order all these quads by x coord
-	// TODO: implement insertion sort
-	// TODO: replace throughout function
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
 
 	// Number
@@ -1176,10 +1170,19 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 		currentQuadIndex++;
 	}
 	q32.number = 32;
+
+	// Renormalise all quad points
+	for (Quad& q : quads)
+	{
+		q.centre.x /= gtSize.x;
+		q.centre.y /= gtSize.y;
+	}
 }
 
 /*
 	Get the intrinsic and extrinsic parameters from the homography
+
+	THIS DOES NOT QORK NEED QR DECOMPOSITIOn
 
 	// Decompose into K matrix and extrinsics
 	// upper triangular numpty
@@ -1218,6 +1221,121 @@ bool ComputeIntrinsicsAndExtrinsicFromHomography(const Matrix3f& H, Matrix3f& K,
 		cout << "Rotation vectors are not orthogonal!" << endl; // not yet
 		//return false;
 	}
+
+	return true;
+}
+
+/*
+	Given a series of correspondences between images (in normalised coords),
+	compute a pinhole model calibration, if possible, and return it
+
+	TODO - explain how Zhang does it
+	name matrix S, not V
+
+	This homography is not the solution to it all, cos different equations have different rotations
+	etc but it encodes the calibration for the camera. We use the equations in Zhang, 1992, to solve
+	for the parameters of K. Then build the matrix, and return it. 
+
+	This can fail when the matrix S is rank deficient; that is, oversolved, such that rows conflict and
+	there are infinitely many solutions
+*/
+bool ComputeCalibration(const std::vector<Matrix3f>& estimates, Matrix3f& K)
+{
+	// Construct the system of linear equations in the parameters of B
+	// The size of V is 2x total quads by 6
+	MatrixXf V;
+	V.resize(estimates.size() * 2, 6);
+	V.setZero();
+	for (unsigned int i = 0; i < estimates.size(); ++i)
+	{
+		// Compute the vectors 
+		const Matrix3f& H = estimates[i];
+		// These are 6-vectors, but eigen doesn
+		VectorXf v11(6);
+		VectorXf v12(6);
+		VectorXf v22(6);
+
+		// i = j = 1
+		v11(0) = H(1, 1)*H(1, 1);
+		v11(1) = H(1, 1)*H(1, 2) + H(1, 2)*H(1, 1);
+		v11(2) = H(1, 2)*H(1, 2);
+		v11(3) = H(1, 3)*H(1, 1) + H(1, 1)*H(1, 3);
+		v11(4) = H(1, 3)*H(1, 2) + H(1, 2)*H(1, 3);
+		v11(5) = H(1, 3)*H(1, 3);
+
+		// i = 1. j = 2
+		v12(0) = H(1, 1)*H(2, 1);
+		v12(1) = H(1, 1)*H(2, 2) + H(1, 2)*H(2, 1);
+		v12(2) = H(1, 2)*H(2, 2);
+		v12(3) = H(1, 3)*H(2, 1) + H(1, 1)*H(2, 3);
+		v12(4) = H(1, 3)*H(2, 2) + H(1, 2)*H(2, 3);
+		v12(5) = H(1, 3)*H(2, 3);
+
+		// i = j = 2
+		v22(0) = H(2, 1)*H(2, 1);
+		v22(1) = H(2, 1)*H(2, 2) + H(2, 2)*H(2, 1);
+		v22(2) = H(2, 2)*H(2, 2);
+		v22(3) = H(2, 3)*H(2, 1) + H(2, 1)*H(2, 3);
+		v22(4) = H(2, 3)*H(2, 2) + H(2, 2)*H(2, 3);
+		v22(5) = H(2, 3)*H(2, 3);
+
+		// Use these to create the matrix V
+		// [  v_12 transpose         ] 
+		// [  (v_11 - v_22) transpose] b = 0
+		// as per zhang, so form these equations in V
+		V(2 * i, 0) = v12(0);
+		V(2 * i, 1) = v12(1);
+		V(2 * i, 2) = v12(2);
+		V(2 * i, 3) = v12(3);
+		V(2 * i, 4) = v12(4);
+		V(2 * i, 5) = v12(5);
+
+		V(2 * i + 1, 0) = v11(0) - v22(0);
+		V(2 * i + 1, 1) = v11(1) - v22(1);
+		V(2 * i + 1, 2) = v11(2) - v22(2);
+		V(2 * i + 1, 3) = v11(3) - v22(3);
+		V(2 * i + 1, 4) = v11(4) - v22(4);
+		V(2 * i + 1, 5) = v11(5) - v22(5);
+	}
+
+	// Get the singular values from the decomposition
+	BDCSVD<MatrixXf> svd(V, ComputeThinU | ComputeFullV);
+	if (!svd.computeV())
+		return false;
+	auto& v = svd.matrixV();
+
+	// We get a six-vector out of this. Get the singular values for our vector
+	// see the code from work about this section. 
+	// We use the matrix form of this vector (see Zhang) when pulling it out of V;
+	// Set B to be the column of V corresponding to the smallest singular value
+	// which is the last as singular values come well-ordered
+	// B = (B11, B12, B22, B13, B23, B33)
+	VectorXf B(6);
+	B << v(0, 6), v(1, 6), v(2, 6),
+		v(3, 6), v(4, 6), v(5, 6); // TODO - is this right?
+	
+	/*
+	Now that we have the parameters of B, compute parameters of K. 
+	This is using Zhang's equations from his Appendix B, 
+	where B = lambda A-T A
+	Since we don't care about scale, we divide throughout by lambda once we have it
+	*/
+	float principalY = (B(1)*B(3) - B(0)*B(4)) / (B(0)*B(2) - B(1)*B(1));
+	float lambda = B(5) - (B(3)*B(3) + principalY*(B(1)*B(3) - B(0)*B(4)))/B(0);
+	float focalX = sqrt(lambda/B(0));
+	float focalY = sqrt(lambda*B(0)/(B(0)*B(2) - B(1)*B(1)));
+	float skew = -B(1)*focalX*focalX*focalY/lambda;
+	float principalX = (skew*principalY/focalY) - B(3)*focalX*focalX/lambda;
+	
+
+	K.setZero();
+	K(0, 0) = focalX;
+	K(1, 1) = focalY;
+	K(2, 2) = lambda;
+	K(0, 1) = skew;
+	K(0, 2) = principalX;
+	K(1, 2) = principalY;
+	//K /= lambda; // is this necessary?
 
 	return true;
 }
