@@ -1282,7 +1282,7 @@ bool ComputeIntrinsicsAndExtrinsicFromHomography(const Matrix3f& H, Matrix3f& K,
 	This can fail when the matrix S is rank deficient; that is, oversolved, such that rows conflict and
 	there are infinitely many solutions
 */
-bool ComputeCalibration(const std::vector<Matrix3f>& estimates, Matrix3f& K)
+bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 {
 	// Construct the system of linear equations in the parameters of B
 	// The size of V is 2x total quads by 6
@@ -1292,7 +1292,7 @@ bool ComputeCalibration(const std::vector<Matrix3f>& estimates, Matrix3f& K)
 	for (unsigned int i = 0; i < estimates.size(); ++i)
 	{
 		// Compute the vectors 
-		const Matrix3f& H = estimates[i];
+		const Matrix3f& H = estimates[i].H;
 		// These are 6-vectors, but eigen doesn
 		VectorXf v11(6);
 		VectorXf v12(6);

@@ -18,8 +18,8 @@ using namespace Eigen;
 #define CHECKERBOARD_FILENAME "checkerboard.jpg"
 
 //#define DEBUG
-#define DEBUG_DRAW_CHECKERS
-#define DEBUG_NUMBER_CHECKERS
+//#define DEBUG_DRAW_CHECKERS
+//#define DEBUG_NUMBER_CHECKERS
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -58,8 +58,7 @@ using namespace Eigen;
 
 	TODO:
 	- Possibly do refinement on final result
-	- checker detection is pretty inconsistent
-	- sometimes getting sqrt of negative. P{resumably from when 
+	- sometimes getting sqrt of negative. Presumably from when 
 	  we are numbering badly and getting a bad homography, throwing everything off.
 	  We need to use only good homographies
 	  Need to guarantee good checker detection
@@ -79,12 +78,16 @@ using namespace Eigen;
 	  Do I have the homography around the wrong way? K takes camera points and converts them to real world points
 	  The synthetic image is "real world". Therefore ... H takes captured points to synthetic points. 
 	  So we are estimating K correctly
+
+	  Ok so now we do refinement on the distortion-free model. 
+
+	  Then add just distortion parameter estimation. 
+
+	  Then add distortion to the refinement model
 	  
 	- What did I just do that broke it? The homography error is huge now
 
 
-	LOG:
-	- Now we can find the corners (to debug)
 */
 int main(int argc, char** argv)
 {
@@ -215,7 +218,7 @@ int main(int argc, char** argv)
 	// get an estimate of the calibration parameters and store these in a vector of calibration structures
 	// Each of these has a possible camera matrix and extrinsics
 	// By the end all these camera matrices should be the same
-	vector<Matrix3f> calibrationEstimates;
+	vector<Calibration> calibrationEstimates;
 	for (int image = 0; image < numImages; ++image)
 	{
 		// Read in the image
@@ -274,8 +277,6 @@ int main(int argc, char** argv)
 #endif
 
 
-	
-
 		// set up matches and create homography
 		cout << "Finding homography for captured checkers" << endl;
 		Matrix3f H;
@@ -303,7 +304,19 @@ int main(int argc, char** argv)
 #endif
 
 		// Store
-		calibrationEstimates.push_back(H);
+		// Need to store all our homographies in non-normalised coords
+		// Multiply on the right by the normalisation
+		Matrix3f N;
+		N.setZero();
+		N(0, 0) = 1 / (float)img.cols;
+		N(1, 1) = 1 / (float)img.rows;
+		N(2, 2) = 1;
+		Calibration c;
+		c.H = (H*N).inverse();
+		c.quads = quads;
+		// TODO: every captured image has to be the same size!!
+		c.size = Point2f(img.cols, img.rows);
+		calibrationEstimates.push_back(c);
 
 		// free the memory
  		img.release();
@@ -318,7 +331,7 @@ int main(int argc, char** argv)
 	}
 
 	/************************/
-	/* Compuate calibration */
+	/* Compute calibration */
 	Matrix3f K;
 	if (ComputeCalibration(calibrationEstimates, K))
 	{
@@ -328,7 +341,41 @@ int main(int argc, char** argv)
 		cout << K / K(2, 2) << endl;
 		// print K
 		// or save to a file
+
+		for (auto& c : calibrationEstimates)
+		{
+			c.K = K;
+
+			// Compute the SE3 pose too
+			// We only need the first two vectors
+			auto r1 = K.inverse() * Vector3f(c.H(0,0), c.H(1,0), c.H(2,0));
+			c.r[0] = r1 / r1.norm();
+			auto r2 = K.inverse() * Vector3f(c.H(0, 1), c.H(1, 1), c.H(2, 1));
+			c.r[1] = r2 / r2.norm();
+			c.r[2] = c.r[0].cross(c.r[1]);
+			auto t = K.inverse() * Vector3f(c.H(0, 2), c.H(1, 2), c.H(2, 2));
+			c.t = t / t.norm();
+
+			// TODO:
+			// Compute a proper rotation using Zhang Appendix C
+		}
 	}
+
+	// For ease of computation in refinement, create a map from number to quad for gtQuads
+	map<int, Quad> gtQuadMap;
+	for (const Quad& q : gtQuads)
+	{
+		gtQuadMap[q.number] = q;
+	}
+
+	// We have an initial estimate. Now do refinement on this
+	if (!RefineCalibration(calibrationEstimates, gtQuadMap))
+	{
+		cout << "Failed to refine our calibration" << endl;
+		return false;
+	}
+
+	// All the estimates should have the new parameters now
 
 	return 0;
 }

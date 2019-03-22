@@ -15,8 +15,14 @@ struct Calibration
 {
 	Eigen::Matrix3f H;
 	Eigen::Matrix3f K;
-	Eigen::Matrix3f R;
+	Eigen::Vector3f r[3];
 	Eigen::Vector3f t;
+
+	cv::Point2f size;
+
+	/*
+	TODO: have distortion params here
+	*/
 
 	std::vector<Quad> quads;
 };
@@ -32,4 +38,4 @@ bool GetHomographyAndMatchQuads(Eigen::Matrix3f& H, const cv::Mat& img, const cv
 
 void TransformAndNumberQuads(const Eigen::Matrix3f& H, const cv::Point2f gtSize, const cv::Point2f size, std::vector<Quad>& quads);
 
-bool ComputeCalibration(const std::vector<Eigen::Matrix3f>& estimates, Eigen::Matrix3f& K);
+bool ComputeCalibration(const std::vector<Calibration>& estimates, Eigen::Matrix3f& K);

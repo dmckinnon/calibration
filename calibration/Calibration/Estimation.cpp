@@ -754,3 +754,75 @@ void TestRANSACLine()
 	assert(inliers.size() >= 50);
 
 }
+
+/*
+	Refine our calibration estimate.
+	This uses Levenberg-Marquardt
+
+TODO: write theory of how this was done
+
+TODO: perhaps do a finite diff test of this jacobian to make sure you did the math right
+
+TODO: include the rotation in the optimisation
+
+*/
+bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> gtQuadMap)
+{
+	// Assumed: that estimates is of size at least three
+	//          that there are 32 gt quads
+
+	Matrix3f K = estimates[0].K;
+
+	// L-M update parameter
+	float lambda = .001f;
+	float prevError = 100000000; // Some massive number so that our first error is always acceptable
+	// Update all the estimates with the new parameters
+	for (int its = 0; its < MAX_BA_ITERATIONS; ++its)
+	{
+		// create the jacobian matrix
+		// create the update vector
+
+		float curr_error = 0;
+
+		// Over each estimate
+		for (int n = 0; n < estimates.size(); ++n)
+		{
+			Calibration& c = estimates[n];
+			// Over each quad within the estimate
+			for (int m = 0; m < c.quads.size(); ++m)
+			{
+				Point2f m_ij = c.quads[m].centre;
+				Point2f M_j = gtQuadMap[c.quads[m].number].centre;
+
+				// fill in R_PARAM once we know how to parameterise R
+				// Rodriguez
+
+				Vector2f e;
+				e(0) = (m_ij.x  - K(0,0)*R_PARAM*M_j.x - K(0,1)*R_PARAM*M_j.y - K(0,2)*c.t(1)) / c.t(3);
+				e(1) = (m_ij.y - K(1,1)*R_PARAM*M_j.y - K(1,2)*c.t(2)) / c.t(3);
+
+
+				// Accumulate jacobians
+				// JtJ
+				// Jte
+
+
+				// accumulate error this iteration
+				curr_error += e.norm();
+			}
+		}
+
+		// Levenberg-Marquardt update
+		for (int i = 0; i < JtJ.rows(); ++i)
+		{
+			JtJ(i, i) += lambda * JtJ(i, i);
+		}
+
+		// Compute the update
+		// JtJ inverse may not always exist ... may need the pseudoinverse
+		// in which case we can do LDLt 
+		auto update = JtJ.inverse() * Jte;
+	}
+
+	return true;
+}

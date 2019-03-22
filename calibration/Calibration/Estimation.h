@@ -5,6 +5,8 @@
 #include <vector>
 #include <utility>
 #include "Features.h"
+#include "Calibration.h"
+#include "Image.h"
 #include <Eigen/Dense>
 
 #define MAX_RANSAC_ITERATIONS 5000
@@ -47,3 +49,5 @@ void TestRANSACLine();
 std::vector<cv::Point> FindLineInPointsRANSAC(const std::vector<cv::Point>& points, const int inlierSetSize,
 	                                          const int maxError, const int its, std::pair<cv::Point, cv::Point>& seedPoints);
 
+
+bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> gtQuadMap);
