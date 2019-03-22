@@ -55,6 +55,8 @@ const cv::Mat rect = (cv::Mat_<int>(3, 3) << 1, 1, 1, 1, 1, 1, 1, 1, 1);
 // Requires that kernelSize be odd and positive
 bool GaussianThreshold(const cv::Mat& input, cv::Mat& output, int kernelSize, int constant);
 
+bool AverageThreshold(const cv::Mat& input, cv::Mat& output);
+
 bool IsInBounds(int height, int width, cv::Point p);
 
 // Erosion using one of the supplied kernels

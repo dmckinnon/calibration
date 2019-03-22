@@ -18,6 +18,8 @@ using namespace Eigen;
 #define CHECKERBOARD_FILENAME "checkerboard.jpg"
 
 //#define DEBUG
+#define DEBUG_DRAW_CHECKERS
+#define DEBUG_NUMBER_CHECKERS
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -62,6 +64,24 @@ using namespace Eigen;
 	  We need to use only good homographies
 	  Need to guarantee good checker detection
 	- Read P3P
+
+	First step:
+	- Have all the images the same size. Have the homography in unnormalised coords???
+	- consistent accurate checker detection. 
+	  Make a global threshold, and perhaps a better contour detector?
+	  I don't think I need a better contour detector - scarramuzza's idea of several layers is actually
+	  really robust. What I do need is an error threshold for the reprojection error for the homography guesstimates
+	  How do I guarantee on good images that we always get enough checkers? RANSAC upping the limits does some, 
+	  but still my checker detection is neither consistent nor incredibly robust
+
+	  Ok I think I fixed a bunch of issues here
+
+	  Do I have the homography around the wrong way? K takes camera points and converts them to real world points
+	  The synthetic image is "real world". Therefore ... H takes captured points to synthetic points. 
+	  So we are estimating K correctly
+	  
+	- What did I just do that broke it? The homography error is huge now
+
 
 	LOG:
 	- Now we can find the corners (to debug)
@@ -217,7 +237,7 @@ int main(int argc, char** argv)
 		}
 		cout << "Found " << quads.size() << " quads" << endl;
 
-#ifdef DEBUG
+#ifdef DEBUG_DRAW_CHECKERS
 		// DEBUG
 		// COnfirm that all the quads are good
 		Mat temp2 = img.clone();
@@ -243,6 +263,10 @@ int main(int argc, char** argv)
 
 			putText(temp2, std::to_string(q.id), q.centre,
 				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(128, 128, 128), 1, CV_AA);
+			rectangle(temp2, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
+			rectangle(temp2, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
+			rectangle(temp2, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
+			rectangle(temp2, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
 		}
 		// Debug display
 		imshow("debug", temp2);
@@ -263,7 +287,7 @@ int main(int argc, char** argv)
 
 		// DEBUG
 		// Draw the homographied quads
-#ifdef DEBUG
+#ifdef DEBUG_NUMBER_CHECKERS
 		Mat temp3 = checkerboard.clone();
 		for (Quad q : quads)
 		{

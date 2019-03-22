@@ -12,8 +12,12 @@ using namespace Eigen;
 #define RECT true
 #define CROSS false
 
+#define MIN_HOMOGRAPHY_ERROR 10.f
+
 //#define DEBUG
 //#define DEBUG_CORNERS
+//#define DEBUG_THRESHOLD
+#define DEBUG_HOMOGRAPHY
 
 /*
 	Align checkerboard.
@@ -47,19 +51,17 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 	Mat img = checkerboard.clone();
 
 	// Threshold the image
-	// Using OpenCV's example, gonna use a kernelSize of 11 and a constant of 2
-	// pick kernel size based on image size
 	Mat temp = img.clone();
 	// downsample for this
-	if (!GaussianThreshold(temp, img, 11, 2))
+	if (!AverageThreshold(temp, img))
 	{
 		return false;
 	}
 
-#ifdef DEBUG
+#ifdef DEBUG_THRESHOLD
 	namedWindow("threshold", WINDOW_NORMAL);
 	imshow("threshold", img);
-	if (debug)
+	//if (debug)
 		waitKey(0);
 #endif
 
@@ -131,12 +133,24 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 				}
 
 				quadsThisIteration.push_back(q);
-#ifdef DEBUG
-				// draw all the quads onto the image
-				if (debug) DrawQuad(img, q);
-#endif
 			}
 		}
+
+#ifdef DEBUG
+		auto temp5 = img.clone();
+		for (Quad q : quads)
+		{
+			rectangle(temp5, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
+			rectangle(temp5, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
+			rectangle(temp5, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
+			rectangle(temp5, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
+		}
+
+
+		// Debug display
+		imshow("all quads so far", temp5);
+		waitKey(0);
+#endif
 
 		// Match with previous set of quads
 		// For each quad found this iteration,
@@ -473,7 +487,7 @@ int FindCornerFromEdgeQuad(const Quad& root, const Quad& branch, vector<Quad>& q
 */
 // Helper
 // just do reprojection error from the corner centres
-float GetReprojectionError(const vector<Quad>& gtQuads, const vector<Quad>& quads,
+float GetReprojectionError(const Mat& img, const Mat& checkerboard,const vector<Quad>& gtQuads, const vector<Quad>& quads,
 	                       const Quad gtCorners[], const Point2f gtSize,
 	                       const Point2f size, const vector<Quad> corners, 
 	                       vector<int> indices, const Matrix3f& H)
@@ -493,30 +507,56 @@ float GetReprojectionError(const vector<Quad>& gtQuads, const vector<Quad>& quad
 		auto newQ2centre = Point2f(Hx(0)*gtSize.x, Hx(1)*gtSize.y);
 		auto newQ1centre = Point2f(q1.centre.x*gtSize.x, q1.centre.y*gtSize.y);
 
-		// This is in normalise
+		// This is in normalised coords
 		e += L2norm(newQ1centre - newQ2centre);
 
-		// INclude in the reprojection error the difference between the quads
+		// Include in the reprojection error the difference between the quads
 		// that each of these connect to
 		Quad q1_1, q2_1;
 		for (int j = 0; j < 4; ++j)
 		{
 			if (q1.associatedCorners[j].second != -1)
 			{
-				q1_1 = gtQuads[q1.associatedCorners[j].second];
+				// .first holds the id. Need to search on this
+				for (Quad q : gtQuads)
+				{
+					if (q.id == q1.associatedCorners[j].first)
+					{
+						q1_1 = q;
+						break;
+					}
+				}
 			}
 			if (q2.associatedCorners[j].second != -1)
 			{
-				q2_1 = quads[q2.associatedCorners[j].second];
+				for (Quad q : quads)
+				{
+					if (q.id == q2.associatedCorners[j].first)
+					{
+						q2_1 = q;
+						break;
+					}
+				}
 			}
 		}
+
+		// Debug display the corresponding quads
+		/*Mat temp = img.clone();
+		circle(temp, q2_1.centre, 20, (128, 128, 128), -1);
+		imshow("secondary reproj error quad", temp);
+		waitKey(0);
+
+		Mat temp1 = checkerboard.clone();
+		circle(temp1, q1_1.centre, 20, (128, 128, 128), -1);
+		imshow("secondary reproj error quad gt", temp1);
+		waitKey(0);*/
 
 		Vector3f x2(q2_1.centre.x/size.x, q2_1.centre.y/size.y, 1);
 		Vector3f Hx2 = H * x2;
 		Hx2 /= Hx2(2);
-		auto newQ1_1centre = Point2f(Hx2(0)*gtSize.x, Hx2(1)*gtSize.y);
+		auto newQ2_1centre = Point2f(Hx2(0)*gtSize.x, Hx2(1)*gtSize.y);
 
-		e += L2norm(q1_1.centre - newQ1_1centre);
+		e += L2norm(q1_1.centre - newQ2_1centre);
 	}
 
 	return e;
@@ -627,7 +667,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 
 			// How mcuh error did this iteration get?
 			vector<int> indices = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
-			float e = GetReprojectionError(gtQuads, quads, gtCorners, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), corners, indices, h);
+			float e = GetReprojectionError(img, checkerboard, gtQuads, quads, gtCorners, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), corners, indices, h);
   			if (e < minError)
 			{
 				minError = e;
@@ -639,13 +679,13 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			}
 		}
 
-		if (minError == 100000000)
+		if (minError > MIN_HOMOGRAPHY_ERROR)
 		{
 			// Nothing worked. Just bail
 			return false;
 		}
 
-#ifdef DEBUG
+#ifdef DEBUG_HOMOGRAPHY
 		cout << "The minimum error was " << minError << endl;
 #endif
 		H = homography;
@@ -685,7 +725,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		return false;
 	}
 
-#ifdef DEBUG
+#ifdef DEBUG_DRAW_HOMOGRAPHY
 	Mat temp6 = checkerboard.clone();
 	for (Quad q : quads)
 	{
@@ -712,7 +752,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	// We just need the smallest projection error, really
 
 	// Now number quads
-	//TransformAndNumberQuads(H, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), quads);
+	TransformAndNumberQuads(H, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), quads);
 
 	return true;
 }
@@ -1175,11 +1215,11 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	q32.number = 32;
 
 	// Renormalise all quad points
-	for (Quad& q : quads)
+	/*for (Quad& q : quads)
 	{
 		q.centre.x /= gtSize.x;
 		q.centre.y /= gtSize.y;
-	}
+	}*/
 }
 
 /*

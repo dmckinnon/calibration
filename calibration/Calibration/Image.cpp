@@ -15,7 +15,7 @@ using namespace std;
 #define GRAD_THRESHOLD 10
 #define MIN_LINE_LENGTH 10
 
-#define RANSAC_LINE_ERROR 1.5f
+#define RANSAC_LINE_ERROR 1.f
 #define CORNER_CONTOUR_EPSILON 5.f
 
 #define LONG_SIDE 9
@@ -188,6 +188,48 @@ bool GaussianThreshold(const cv::Mat& input, cv::Mat& output, int kernelSize, in
 }
 
 /*
+	Average Threshold
+	Find the average pixel value in the image, and threshold based on that
+*/
+bool AverageThreshold(const cv::Mat& input, cv::Mat& output)
+{
+	if (input.rows != output.rows || input.cols != output.cols)
+	{
+		return false;
+	}
+
+	// Find average
+	float average = 0;
+	for (int y = 0; y < input.rows; ++y)
+	{
+		for (int x = 0; x < input.cols; ++x)
+		{
+			average += (float)input.at<uchar>(y,x);
+		}
+	}
+	average /= (float)input.rows*input.cols;
+
+	// Actually do threshold
+	for (int y = 0; y < input.rows; ++y)
+	{
+		for (int x = 0; x < input.cols; ++x)
+		{
+			auto pixel = input.at<uchar>(y, x);
+			if (pixel < average)
+			{
+				output.at<uchar>(y, x) = BLACK;
+			}
+			else
+			{
+				output.at<uchar>(y, x) = WHITE;
+			}
+		}
+	}
+
+	return true;
+}
+
+/*
 	Erosion
 	There are two supplied kernels for this, but I guess you can also supply your own
 	The kernel is placed over every input pixel. If any pixel covered by the kernel's nonzero values is
@@ -320,120 +362,6 @@ bool FindContours(const cv::Mat& input, std::vector<Contour>& contours, bool deb
 
 	return true;
 }
-
-/*
-	Find a single contour given a starting point in the image. 
-	This returns a contour using the chain-direction method, walking
-	around the black area searching relative to the last direction taken. 
-
-	Actually, revision: given that we are relying on RANSAC (if we weren't using this,
-	I'd be doing another method), we can just collect all points that are adjacent to a white pixel
-*/
-
-/*
-int RepeatedPointsInContour(const Contour& c)
-{
-	int repeatedPoints = 0;
-
-	// Firstly, construct vector of points
-	vector<Point> points;
-	Point curPoint = c.start;
-	points.push_back(curPoint);
-	for (Contour::DIRECTION d : c.path)
-	{
-		curPoint += dirs[d];
-		points.push_back(curPoint);
-	}
-
-	for (int i = 0; i < points.size(); ++i)
-	{
-		Point& p = points[i];
-		for (int j = 0; j < points.size(); ++j)
-		{
-			if (p == points[j])
-			{
-				repeatedPoints++;
-			}
-		}
-	}
-
-	return repeatedPoints;
-}
-Contour FindContour(const Mat& input, const Point& start)
-{
-	Point curPoint = start;
-	Contour c;
-	c.start = start;
-
-	do
-	{
-		// Search from up relative to the previous direction
-		auto l = c.path.size();
-		Contour::DIRECTION prevDir = !c.path.empty() ? c.path[l - 1] : Contour::RIGHT;
-		for (int i = 0; i < Contour::NUM_DIRS; ++i)
-		{
-			int direction = c.path.empty() ? i : (i + prevDir) % Contour::NUM_DIRS;
-
-			if (!IsInBounds(input.rows, input.cols, curPoint + dirs[direction]))
-			{
-				continue;
-			}
-			//Point p = curPoint + dirs[direction];
-			auto pixel = input.at<uchar>(curPoint + dirs[direction]);
-			if (pixel == BLACK && PixelIsAdjacentToWhite(input, curPoint + dirs[direction]))
-			{
-				// Might need to enforce that every part of the contour has a white square
-				// 8-way adjacent to it
-				// This ensures that we always pick edge-squares
-
-				// WOO this is a contour point add this and break
-				// We always save the absolute direction, even
-				// though we check relative direction
-				c.path.push_back((Contour::DIRECTION)direction);
-				curPoint += dirs[direction];
-				break;
-			}
-		}
-		if (l == c.path.size())
-		{
-			// If we didn't find any point, then
-			// break and end in sadness
-			break;
-		}
-		
-		// Sanity checks
-
-		// if curPoint is ever outside the image, BAD
-		// just kill the contour and end it there
-		if (!IsInBounds(input.rows, input.cols, curPoint))
-		{
-			c.path.clear();
-			break;
-		}
-
-		// Check that at least 50% of the contour is unique
-		// Only perform this check every 1000 points added though
-		if (c.path.size() % 1000 == 0)
-		{
-			if (RepeatedPointsInContour(c) > c.path.size() * 0.9)
-			{
-				c.path.clear();
-				break;
-			}
-		}
-
-		// The maximum length of the contour is technically every pixel in the image
-		// if it is longer we have an infinite loop
-		if (c.path.size() > input.cols*input.rows)
-		{
-			c.path.clear();
-			break;
-		}
-
-	} while (curPoint != start);
-
-	return c;
-}*/
 
 // Unit test for FindContour
 void TestFindContour()
@@ -712,7 +640,7 @@ bool FindQuad(const Mat& img, const Contour& c, Quad& q)
 		// Search among points for a line with RANSAC
 		vector<Point> inliers;
 		pair<Point, Point> seedPoints;
-		inliers = FindLineInPointsRANSAC(points, minLineSize, RANSAC_LINE_ERROR, 200, seedPoints);
+		inliers = FindLineInPointsRANSAC(points, minLineSize, RANSAC_LINE_ERROR, 500, seedPoints);
 
 		if (!inliers.empty())
 		{
