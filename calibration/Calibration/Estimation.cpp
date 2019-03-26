@@ -763,13 +763,19 @@ TODO: write theory of how this was done
 
 TODO: perhaps do a finite diff test of this jacobian to make sure you did the math right
 
-TODO: include the rotation in the optimisation
-
 */
 bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> gtQuadMap)
 {
 	// Assumed: that estimates is of size at least three
 	//          that there are 32 gt quads
+
+	/*
+		TODO: Finite diff to confirm the Jacobian is what we want it to be
+	
+	
+	
+	
+	*/
 
 	Matrix3f K = estimates[0].K;
 
@@ -777,12 +783,31 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 	float lambda = .001f;
 	float prevError = 100000000; // Some massive number so that our first error is always acceptable
 	// Update all the estimates with the new parameters
+	float currError = 0;
 	for (int its = 0; its < MAX_BA_ITERATIONS; ++its)
 	{
 		// create the jacobian matrix
 		// create the update vector
+		// These each have to accomodate udpates for each pose
+		// for each image. 
+		// So:
+		// 6x calibration params
+		// 6 vector update per image
+		// To come: distortion params
+		// J_K is 2 by 5
+		// J_P is 3 x 6
+		// so 2 + 3 x num estimates by 6
+		// Therefore JtJ is square 2 + 3 x num estimates
+		// updates is JtJ long
+		// JtJ will be pretty sparse
+		int numParams = 5 + 6 * estimates.size();
+		MatrixXf JtJ(numParams, numParams);
+		JtJ.setZero();
+		VectorXf Jte(numParams);
+		Jte.setZero();
+		VectorXf update(numParams);
 
-		float curr_error = 0;
+		float error_accum = 0;
 
 		// Over each estimate
 		for (int n = 0; n < estimates.size(); ++n)
@@ -796,19 +821,46 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 
 				// fill in R_PARAM once we know how to parameterise R
 				// Rodriguez
+				// or should I do R as an SE3?
+				// I'd rather do it as an SE3
+				Vector3f rx; // This is an interim calculation stage for the error that makes everything later easier
+				rx(0) = c.R(0,0) * M_j.x + c.R(1,0) * M_j.y + c.t[0];
+				rx(1) = c.R(0,1) * M_j.x + c.R(1,1) * M_j.y + c.t[1];
+				rx(2) = c.R(0,2) * M_j.x + c.R(1,2) * M_j.y + c.t[2];
 
-				Vector2f e;
-				e(0) = (m_ij.x  - K(0,0)*R_PARAM*M_j.x - K(0,1)*R_PARAM*M_j.y - K(0,2)*c.t(1)) / c.t(3);
-				e(1) = (m_ij.y - K(1,1)*R_PARAM*M_j.y - K(1,2)*c.t(2)) / c.t(3);
+				Vector3f f = K * rx;
 
+				Vector3f e(m_ij.x, m_ij.y, 1);
+				e = e - f;
+
+				// Build the Jacobian
+				//     ( rx[0]   0   rx[1] rx[2]   0   |       | 
+				// J = (   0   rx[1]   0     0   rx[2] |  I_3  | -f skew ... per estimate
+				//     (   0     0     0     0     0   |       |  
+				MatrixXf J(3, numParams);
+				J.setZero();
+				int dP = 5 + n * 6;
+				J(0, 0) = rx[0];
+				J(1, 1) = rx[1];
+				J(0, 2) = rx[1];
+				J(0, 3) = rx[2];
+				J(1, 4) = rx[2];
+				J(0, dP) = 1;
+				J(1, dP + 1) = 1;
+				J(2, dP + 2) = 1;
+				J(1, dP + 3) = -f(2);
+				J(2, dP + 3) = f(1);
+				J(0, dP + 4) = f(2);
+				J(2, dP + 4) = -f(0);
+				J(0, dP + 5) = -f(1);
+				J(1, dP + 5) = f(0);
 
 				// Accumulate jacobians
-				// JtJ
-				// Jte
-
+				JtJ += J.transpose() * J;
+				Jte += J.transpose() * e;
 
 				// accumulate error this iteration
-				curr_error += e.norm();
+				error_accum += e.norm();
 			}
 		}
 
@@ -821,7 +873,67 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 		// Compute the update
 		// JtJ inverse may not always exist ... may need the pseudoinverse
 		// in which case we can do LDLt 
-		auto update = JtJ.inverse() * Jte;
+		update = JtJ.inverse() * Jte;
+
+		currError = error_accum;
+		cout << "Current error: " << currError << endl;
+		// Early cutoff if our error is low enough
+		if (currError < BA_THRESHOLD)
+		{
+			cout << "Error low early" << endl;
+
+			break;
+		}
+		// Update and continue if good enough
+		if (currError < prevError)
+		{
+			lambda /= 10;
+			prevError = currError;
+
+			cout << "Improving" << endl;
+		}
+		else
+		{
+			lambda *= 10;
+
+			cout << "Not improving" << endl;
+		}
+
+		// Now pull out the little bits of each update and apply them
+		// Each of the calibration updates just add
+		K(0, 0) += update(0);
+		K(1, 1) += update(1);
+		K(0, 1) += update(2);
+		K(0, 2) += update(3);
+		K(1, 2) += update(4);
+
+		// update the poses with a left exponential update
+		// The following comes from Section 3.2, equations 77 to 84 of Ethan Eade's lie.pdf,
+		// http://ethaneade.com/lie.pdf
+		for (int n = 0; n < estimates.size(); ++n)
+		{
+			Calibration& c = estimates[n];
+			Vector3f u(update(5 + 6 * n), update(5 + 6 * n + 1), update(5 + 6 * n + 2));
+			Vector3f w(update(5 + 6 * n + 3), update(5 + 6 * n + 4), update(5 + 6 * n + 5));
+			Matrix3f I;
+			I.setIdentity();
+
+			float theta = sqrt(w.transpose()*w);
+			float A = sin(theta) / theta;
+			float B = (1 - cos(theta)) / (theta*theta);
+			float C = (1 - A) / (theta*theta);
+
+			Matrix3f w_skew;
+			w_skew << 0, -w(2), w(1),
+				w(2), 0, -w(0),
+				-w(1), w(0), 0;
+			
+			Matrix3f R = I + A * w_skew + B * w_skew*w_skew;
+			Matrix3f V = I + B * w_skew + C * w_skew*w_skew;
+
+			c.R = R * c.R;
+			c.t = R * c.t + V * u;
+		}
 	}
 
 	return true;

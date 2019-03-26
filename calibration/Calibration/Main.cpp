@@ -337,6 +337,7 @@ int main(int argc, char** argv)
 	{
 		// TODO:
 		// is K in the right coordinates?
+		// How to avoid NaN?
 		cout << K << endl;
 		cout << K / K(2, 2) << endl;
 		// print K
@@ -355,6 +356,10 @@ int main(int argc, char** argv)
 			c.r[2] = c.r[0].cross(c.r[1]);
 			auto t = K.inverse() * Vector3f(c.H(0, 2), c.H(1, 2), c.H(2, 2));
 			c.t = t / t.norm();
+
+			c.R << c.r[0][0], c.r[1][0], c.r[2][0],
+				c.r[0][1], c.r[1][1], c.r[2][1],
+				c.r[0][2], c.r[1][2], c.r[2][2];
 
 			// TODO:
 			// Compute a proper rotation using Zhang Appendix C

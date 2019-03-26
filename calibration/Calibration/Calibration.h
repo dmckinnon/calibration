@@ -16,6 +16,7 @@ struct Calibration
 	Eigen::Matrix3f H;
 	Eigen::Matrix3f K;
 	Eigen::Vector3f r[3];
+	Eigen::Matrix3f R;
 	Eigen::Vector3f t;
 
 	cv::Point2f size;
