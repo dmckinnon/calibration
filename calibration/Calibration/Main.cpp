@@ -87,6 +87,10 @@ using namespace Eigen;
 	  
 	- What did I just do that broke it? The homography error is huge now
 
+	- I thikn I am not computing the calibration matrix correctly. Check this first before sinking a lot
+	  into refinement
+	  Confirm all the mathematics for calibration computation
+
 
 */
 int main(int argc, char** argv)
@@ -321,7 +325,6 @@ int main(int argc, char** argv)
 		// free the memory
  		img.release();
 	}
-	checkerboard.release();
 
 	// We need a minimum number of estimates for this to work
 	if (calibrationEstimates.size() < 3)
@@ -363,13 +366,32 @@ int main(int argc, char** argv)
 
 			// TODO:
 			// Compute a proper rotation using Zhang Appendix C
+			// The following computation comes from Zhang, Appendix C
+			
+			// We need to compute the singular value decomposition of Q
+			// where Q is the approximation to the true R. That is to say, Q = c.R 
+			// at this point
+			// Let SVD(Q) = USV^T
+			// Then R = UV^T is the best rotation matrix that approximates Q
+			// We then put this into c.R
+			BDCSVD<MatrixXf> svd(c.R, ComputeFullU | ComputeFullV);
+			if (!svd.computeV())
+				return -1;
+			auto& V = svd.matrixV();
+			if (!svd.computeU())
+				return -1;
+			auto& U = svd.matrixU();
+
+			c.R = U * V.transpose();
 		}
 	}
 
 	// For ease of computation in refinement, create a map from number to quad for gtQuads
 	map<int, Quad> gtQuadMap;
-	for (const Quad& q : gtQuads)
+	for (Quad& q : gtQuads)
 	{
+		q.centre.x /= checkerboard.cols;
+		q.centre.y /= checkerboard.rows;
 		gtQuadMap[q.number] = q;
 	}
 
@@ -382,6 +404,7 @@ int main(int argc, char** argv)
 
 	// All the estimates should have the new parameters now
 
+	checkerboard.release();
 	return 0;
 }
 

@@ -1300,27 +1300,27 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 
 		// i = j = 1
 		v11(0) = H(0, 0)*H(0, 0);
-		v11(1) = H(0, 0)*H(0, 1) + H(0, 1)*H(0, 0);
-		v11(2) = H(0, 1)*H(0, 1);
-		v11(3) = H(0, 2)*H(0, 0) + H(0, 0)*H(0, 2);
-		v11(4) = H(0, 2)*H(0, 1) + H(0, 1)*H(0, 2);
-		v11(5) = H(0, 2)*H(0, 2);
+		v11(1) = H(0, 0)*H(1, 0) + H(1, 0)*H(0, 0);
+		v11(2) = H(1, 0)*H(1, 0);
+		v11(3) = H(2, 0)*H(0, 0) + H(0, 0)*H(2, 0);
+		v11(4) = H(2, 0)*H(1, 0) + H(1, 0)*H(2, 0);
+		v11(5) = H(2, 0)*H(2, 0);
 
 		// i = 1. j = 2
-		v12(0) = H(0, 0)*H(1, 0);
-		v12(1) = H(0, 0)*H(1, 1) + H(0, 1)*H(1, 0);
-		v12(2) = H(0, 1)*H(1, 1);
-		v12(3) = H(0, 2)*H(1, 0) + H(0, 0)*H(1, 2);
-		v12(4) = H(0, 2)*H(1, 1) + H(0, 1)*H(1, 2);
-		v12(5) = H(0, 2)*H(1, 2);
+		v12(0) = H(0, 0)*H(0, 1);
+		v12(1) = H(0, 0)*H(1, 1) + H(1, 0)*H(0, 1);
+		v12(2) = H(1, 0)*H(1, 1);
+		v12(3) = H(2, 0)*H(0, 1) + H(0, 0)*H(2, 1);
+		v12(4) = H(2, 0)*H(1, 1) + H(1, 0)*H(2, 1);
+		v12(5) = H(2, 0)*H(2, 1);
 
 		// i = j = 2
-		v22(0) = H(1, 0)*H(1, 0);
-		v22(1) = H(1, 0)*H(1, 1) + H(1, 1)*H(1, 0);
+		v22(0) = H(0, 1)*H(0, 1);
+		v22(1) = H(0, 1)*H(1, 1) + H(1, 1)*H(0, 1);
 		v22(2) = H(1, 1)*H(1, 1);
-		v22(3) = H(1, 2)*H(1, 0) + H(1, 0)*H(1, 2);
-		v22(4) = H(1, 2)*H(1, 1) + H(1, 1)*H(1, 2);
-		v22(5) = H(1, 2)*H(1, 2);
+		v22(3) = H(2, 1)*H(0, 1) + H(0, 1)*H(2, 1);
+		v22(4) = H(2, 1)*H(1, 1) + H(1, 1)*H(2, 1);
+		v22(5) = H(2, 1)*H(2, 1);
 
 		// Use these to create the matrix V
 		// [  v_12 transpose         ] 
@@ -1340,12 +1340,15 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 		V(2 * i + 1, 4) = v11(4) - v22(4);
 		V(2 * i + 1, 5) = v11(5) - v22(5);
 	}
+	cout << V << endl;
 
 	// Get the singular values from the decomposition
 	BDCSVD<MatrixXf> svd(V, ComputeThinU | ComputeFullV);
 	if (!svd.computeV())
 		return false;
 	auto& v = svd.matrixV();
+
+	cout << v << endl;
 
 	// We get a six-vector out of this. Get the singular values for our vector
 	// see the code from work about this section. 

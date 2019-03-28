@@ -772,8 +772,15 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 	/*
 		TODO: Finite diff to confirm the Jacobian is what we want it to be
 	
+		TODO: point comparison is hideously off. Error computation is wrong
 	
-	
+		I've computed the proper rotation according to Zhang
+
+		The calibration matrix could just be WAY off ... ?
+		Am I computing the calibration matrix correctly?
+
+		calibration matrix is somewhat fine? Skew should be small and it is ... 
+		but maybe other bits are not?
 	
 	*/
 
@@ -784,7 +791,7 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 	float prevError = 100000000; // Some massive number so that our first error is always acceptable
 	// Update all the estimates with the new parameters
 	float currError = 0;
-	for (int its = 0; its < MAX_BA_ITERATIONS; ++its)
+	for (int its = 0; its < 5/*MAX_BA_ITERATIONS*/; ++its)
 	{
 		// create the jacobian matrix
 		// create the update vector
@@ -818,19 +825,31 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 			{
 				Point2f m_ij = c.quads[m].centre;
 				Point2f M_j = gtQuadMap[c.quads[m].number].centre;
+				cout << "GT point " << M_j << endl;
 
 				// fill in R_PARAM once we know how to parameterise R
 				// Rodriguez
 				// or should I do R as an SE3?
 				// I'd rather do it as an SE3
-				Vector3f rx; // This is an interim calculation stage for the error that makes everything later easier
-				rx(0) = c.R(0,0) * M_j.x + c.R(1,0) * M_j.y + c.t[0];
-				rx(1) = c.R(0,1) * M_j.x + c.R(1,1) * M_j.y + c.t[1];
-				rx(2) = c.R(0,2) * M_j.x + c.R(1,2) * M_j.y + c.t[2];
-
+				Vector3f vM_j(M_j.x, M_j.y, 0);
+				Vector3f rx = c.R * vM_j + c.t; // This is an interim calculation stage for the error that makes everything later easier
+				//rx(0) = c.R(0,0) * M_j.x + c.R(0,1) * M_j.y + c.t[0];
+				//rx(1) = c.R(1,0) * M_j.x + c.R(1,1) * M_j.y + c.t[1];
+				//rx(2) = c.R(2,0) * M_j.x + c.R(2,1) * M_j.y + c.t[2];
 				Vector3f f = K * rx;
+				f /= f(2); // normalise
 
 				Vector3f e(m_ij.x, m_ij.y, 1);
+				
+
+				// TODO: 
+				// some of f's elements are negative. This should never happen
+
+
+				//cout << "GT point: " << vM_j << endl;
+				cout << "Computed image point: \n" << f << endl;
+				cout << "Image point: \n" << e << endl;
+
 				e = e - f;
 
 				// Build the Jacobian
@@ -861,6 +880,7 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 
 				// accumulate error this iteration
 				error_accum += e.norm();
+				cout << "Error this point: " << e.norm() << endl;
 			}
 		}
 
@@ -938,3 +958,66 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 
 	return true;
 }
+
+/*
+The purpose of this is to compute the difference between:
+(K + delta_k)*P*x - K*P*x
+and
+J_K(x)
+
+This is to test whether or not we have the right formulation of the Jacobian.
+This test verifies that we do.
+*/
+/*
+void FiniteDiffForCalibration(const Matrix3f& K, const Matrix3f& R, const Vector3f& t)
+{
+	const Vector3f x(1.f, 1.f, 0.f);
+
+	// Let f(k) = KPx
+	// Compute f(k+epsilon) and f(k), then divide the difference by epsilon
+	Vector3f rx = R*x + t;
+	Vector3f f = K * rx;
+
+	Vector3f KPx = K * (R*x + t);
+	float w = KPx(2);
+	//KPx /= w;
+	float e = 0.01f;
+	MatrixXf difference(3, 5);
+	difference.setZero();
+	difference(0, 0) = ((K(0, 0) + e)*rx(0) + K(0, 1)*rx(1) + K(0, 2)*rx(2) - KPx(0)) / e;
+	difference(0, 1) = ((K(0, 0)*rx(0) + (K(0, 1) + e)*rx(1) + K(0, 2)*rx(2)) - KPx(0)) / e;
+	difference(0, 2) = ((K(0, 0)*rx(0) + K(0, 1)*rx(1) + (K(0, 2) + e)*rx(2)) - KPx(0)) / e;
+
+	difference(1, 3) = ((K(1, 0) + e)*rx(0) + K(1, 1)*rx(1) + K(1, 2)*rx(2) - KPx(1)) / e;
+	difference(1, 4) = (K(1, 0)*rx(0) + (K(1, 1) + e)*rx(1) + K(1, 2)*rx(2) - KPx(1)) / e;
+	difference(1, 5) = (K(1, 0)*rx(0) + K(1, 1)*rx(1) + (K(1, 2) + e)*rx(2) - KPx(1)) / e;
+
+	float w_e7 = ((K(2, 0) + e)*x(0) + H(2, 1)*x(1) + H(2, 2)*x(2));
+	float w_e8 = (K(2, 0)*x(0) + (H(2, 1) + e)*x(1) + H(2, 2)*x(2));
+	float w_e9 = (H(2, 0)*x(0) + H(2, 1)*x(1) + (H(2, 2) + e)*x(2));
+
+	float x1 = H(0, 0)*x(0) + H(0, 1)*x(1) + H(0, 2)*x(2);
+	float x2 = H(1, 0)*x(0) + H(1, 1)*x(1) + H(1, 2)*x(2);
+	difference(0, 6) = (x1 / w_e7 - KPx(0)) / e;
+	difference(0, 7) = (x1 / w_e8 - KPx(0)) / e;
+	difference(0, 8) = (x1 / w_e9 - KPx(0)) / e;
+	difference(1, 6) = (x2 / w_e7 - KPx(1)) / e;
+	difference(1, 7) = (x2 / w_e8 - KPx(1)) / e;
+	difference(1, 8) = (x2 / w_e9 - KPx(1)) / e;
+
+	// Next, compute the Jacobian using Hartley and Zisserman's method,
+	// at x. 
+	
+	MatrixXf J(3, 5);
+	J.setZero();
+	J(0, 0) = f[0];
+	J(1, 1) = f[1];
+	J(0, 2) = f[1];
+	J(0, 3) = f[2];
+	J(1, 4) = f[2];
+
+	// finally, return the difference between these matrices. The difference should be vanishing
+	cout << "J: " << endl << J << endl;
+	cout << "Finite difference: " << endl << difference << endl;
+	cout << J - difference << endl;
+}*/
