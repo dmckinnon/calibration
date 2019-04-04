@@ -837,7 +837,7 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 				//rx(1) = c.R(1,0) * M_j.x + c.R(1,1) * M_j.y + c.t[1];
 				//rx(2) = c.R(2,0) * M_j.x + c.R(2,1) * M_j.y + c.t[2];
 				Vector3f f = K * rx;
-				f /= f(2); // normalise
+				//f /= f(2); // normalise
 
 				Vector3f e(m_ij.x, m_ij.y, 1);
 				

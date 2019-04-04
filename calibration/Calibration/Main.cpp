@@ -19,7 +19,8 @@ using namespace Eigen;
 
 //#define DEBUG
 //#define DEBUG_DRAW_CHECKERS
-//#define DEBUG_NUMBER_CHECKERS
+#define DEBUG_NUMBER_CHECKERS
+#define DEBUG_CALIBRATION
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -55,6 +56,10 @@ using namespace Eigen;
 
 	Issues:
 	- Check the math with homography decomposition
+	- Checker detection still very inconsistent
+	- Still getting NaN sometimes after SVD. Bad homographies?
+	  I keep getting so many NaNs! Why are detections non-deterministic??
+	  Only line detection should be nondeterministic
 
 	TODO:
 	- Possibly do refinement on final result
@@ -90,6 +95,25 @@ using namespace Eigen;
 	- I thikn I am not computing the calibration matrix correctly. Check this first before sinking a lot
 	  into refinement
 	  Confirm all the mathematics for calibration computation
+
+	  I think I 
+	  a) need to get better data
+	  b) make the first part of the algorithm considerably more robust
+
+	  print a checkerboard with the checkers already separated
+	  this avoids the need to erode and iterate 
+
+
+
+	  NEW PLAN:
+	  - print separated checkerboard bigger
+	  - take fixed-focus shots from small but varying angles (Rajeev - or auto focus?)
+	  - remove iterating on erode, just do one iteration
+	  - this should be considerably more robust
+	    and should allow for better detection of errors later on
+	  - Hopefully this gives a good set of solutions, and from there I can work better
+
+	  If this continues to fail ... May. If no progress by May, then go to stereo
 
 
 */
@@ -232,12 +256,21 @@ int main(int argc, char** argv)
 		// Get the quads in the image
 		vector<Quad> quads;
 		cout << "Finding checkers in captured image" << endl;
-		if (!CheckerDetection(img, quads, false))
+		int its = 0;
+		bool skip = false;
+		while (!CheckerDetection(img, quads, false))
 		{
 			cout << "Bad image for checkers in image " << image + 1 << endl;
-			continue;
+			its++;
+			quads.clear();
+			if (its >= 5)
+			{
+				skip = true;
+				break;
+			}
+			
 		}
-		if (quads.empty())
+		if (quads.empty() || skip)
 		{
 			cout << "No quads in image " << image + 1 << endl;
 			continue;
@@ -296,11 +329,20 @@ int main(int argc, char** argv)
 		Mat temp3 = checkerboard.clone();
 		for (Quad q : quads)
 		{
+			Matrix3f N;
+			N.setZero();
+			N(0, 0) = 1 / (float)img.cols;
+			N(1, 1) = 1 / (float)img.rows;
+			N(2, 2) = 1;
+			Vector3f x(q.centre.x, q.centre.y, 1);
+			Vector3f Hx = H * N * x;
+			Hx /= Hx(2);
+			auto qCentre = Point2f(Hx(0)*temp3.cols, Hx(1)*temp3.rows);
 
-			putText(temp3, std::to_string(q.number), q.centre,
+			putText(temp3, std::to_string(q.number), qCentre,
 				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
 
-			circle(temp3, q.centre, 20, (128, 128, 128), 2);
+			circle(temp3, qCentre, 20, (128, 128, 128), 2);
 		}
 		// Debug display
 		imshow("Numbered and Hd", temp3);
@@ -352,13 +394,14 @@ int main(int argc, char** argv)
 
 			// Compute the SE3 pose too
 			// We only need the first two vectors
-			auto r1 = K.inverse() * Vector3f(c.H(0,0), c.H(1,0), c.H(2,0));
-			c.r[0] = r1 / r1.norm();
-			auto r2 = K.inverse() * Vector3f(c.H(0, 1), c.H(1, 1), c.H(2, 1));
-			c.r[1] = r2 / r2.norm();
+			auto lambda = 1.f / (K.inverse() * Vector3f(c.H(0, 0), c.H(1, 0), c.H(2, 0))).norm();
+			auto r1 = lambda * K.inverse() * Vector3f(c.H(0,0), c.H(1,0), c.H(2,0));
+			c.r[0] = r1;// / r1.norm();
+			auto r2 = lambda * K.inverse() * Vector3f(c.H(0, 1), c.H(1, 1), c.H(2, 1));
+			c.r[1] = r2;// / r2.norm();
 			c.r[2] = c.r[0].cross(c.r[1]);
-			auto t = K.inverse() * Vector3f(c.H(0, 2), c.H(1, 2), c.H(2, 2));
-			c.t = t / t.norm();
+			auto t = lambda * K.inverse() * Vector3f(c.H(0, 2), c.H(1, 2), c.H(2, 2));
+			c.t = t;// / t.norm();
 
 			c.R << c.r[0][0], c.r[1][0], c.r[2][0],
 				c.r[0][1], c.r[1][1], c.r[2][1],
@@ -383,7 +426,43 @@ int main(int argc, char** argv)
 			auto& U = svd.matrixU();
 
 			c.R = U * V.transpose();
+
+
+			// Now test
+			// (H*N).inverse() = K [r1 r2 t]
+			// so ...
+			// H = HN takes image coords of captured to the normalised gt plane
+			// so HN.inverse() is estimated
+#ifdef DEBUG_CALIBRATION
+			Mat temp4 = checkerboard.clone();
+			for (Quad q : c.quads)
+			{
+				Matrix3f H;
+				H << c.r[0][0], c.r[1][0], c.t[0],
+					 c.r[0][1], c.r[1][1], c.t[1],
+					 c.r[0][2], c.r[1][2], c.t[2];
+				H = K * H;
+				H = H.inverse();
+				Vector3f x(q.centre.x, q.centre.y, 1);
+				Vector3f Hx = H*x;
+				Hx /= Hx(2);
+				auto qCentre = Point2f(Hx(0)*temp4.cols, Hx(1)*temp4.rows);
+
+				putText(temp4, std::to_string(q.number), qCentre,
+					FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+
+				circle(temp4, qCentre, 20, (128, 128, 128), 2);
+			}
+			// Debug display
+			imshow("With estimated cal and pose", temp4);
+			waitKey(0);
+#endif
 		}
+	} 
+	else
+	{
+		cout << "Failed to compute calibration" << endl;
+		return -1;
 	}
 
 	// For ease of computation in refinement, create a map from number to quad for gtQuads

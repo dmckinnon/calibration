@@ -420,10 +420,9 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 #endif
 
 	// Make sure at least 90% of the desired number of quads have been found
-	if (quads.size() < 24)
+	if (quads.size() < 30)
 	{
 		return false;
-
 	}
 
 	return true;
@@ -1214,12 +1213,14 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	}
 	q32.number = 32;
 
-	// Renormalise all quad points
-	/*for (Quad& q : quads)
+	// Transform them back
+	for (Quad& q : quads)
 	{
-		q.centre.x /= gtSize.x;
-		q.centre.y /= gtSize.y;
-	}*/
+		Vector3f x(q.centre.x / gtSize.x, q.centre.y / gtSize.y, 1);
+		Vector3f Hx = H.inverse() * x;
+		Hx /= Hx(2);
+		q.centre = Point2f(Hx(0)*size.x, Hx(1)*size.y);
+	}
 }
 
 /*
@@ -1358,7 +1359,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	// B = (B11, B12, B22, B13, B23, B33)
 	VectorXf B(6);
 	B << v(0, 5), v(1, 5), v(2, 5),
-		v(3, 5), v(4, 5), v(5, 5); // TODO - is this right?
+		v(3, 5), v(4, 5), v(5, 5);
 	cout << B << endl;
 	/*
 	Now that we have the parameters of B, compute parameters of K. 
@@ -1385,7 +1386,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	K(0, 1) = skew;
 	K(0, 2) = principalX;
 	K(1, 2) = principalY;
-	//K /= lambda; // is this necessary?
+	K /= lambda; // is this necessary?
 
 	return true;
 }
