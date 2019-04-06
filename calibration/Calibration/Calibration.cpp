@@ -18,6 +18,8 @@ using namespace Eigen;
 //#define DEBUG_CORNERS
 //#define DEBUG_THRESHOLD
 #define DEBUG_HOMOGRAPHY
+#define DEBUG_DRAW_HOMOGRAPHY
+#define DEBUG_QUADS
 
 /*
 	Align checkerboard.
@@ -38,11 +40,11 @@ using namespace Eigen;
 // Support functions
 float L2norm(Point a)
 {
-	return sqrt(a.x*a.x + a.y*a.y);
+	return (float)sqrt(a.x*a.x + a.y*a.y);
 }
 float L2norm(Point2f a)
 {
-	return sqrt(a.x*a.x + a.y*a.y);
+	return (float)sqrt(a.x*a.x + a.y*a.y);
 }
 // Actual Function
 bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
@@ -76,24 +78,24 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 	
 	bool kernelCrossOrRect = RECT;
 	int quadID = 0;
-	for (int its = 0; its < MAX_ERODE_ITERATIONS; ++its)
-	{
+	//for (int its = 0; its < MAX_ERODE_ITERATIONS; ++its)
+	//{
 		// erode the image
-		Mat erode = img.clone();
+		/*Mat erode = img.clone();
 		auto kernel = kernelCrossOrRect? rect : cross;
 		kernelCrossOrRect = !kernelCrossOrRect;
 		if (!Erode(img, erode, kernel))
 		{
 			continue;
 		}
-		img = erode;
+		img = erode;*/
 		// use downsampled version
-
+/*
 #ifdef DEBUG
 		namedWindow("erode", WINDOW_NORMAL);
 		imshow("erode", erode);
 		if (debug) waitKey(0);
-#endif
+#endif*/
 
 		// Somehow go high res here?
 
@@ -101,7 +103,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 		vector<Contour> contours;
 		if (!FindContours(img, contours/*, debug*/))
 		{
-			continue;
+			return false;//continue;
 		}
 
 #ifdef DEBUG
@@ -168,7 +170,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 					float diagLength = GetLongestDiagonal(q2) / 4.f;
 					if (DistBetweenPoints(q1.centre, q2.centre) < diagLength)
 					{
-						Mat newErode = erode.clone();
+						Mat newErode = img.clone();
 						Mat orig = img.clone();
 						if (debug)
 						{
@@ -186,7 +188,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 				{
 					// This quad wasn't found in previous iterations. Add it
 					quads.push_back(q1);
-					Mat newErode = erode.clone();
+					Mat newErode = img.clone();
 					//if (debug) DrawQuad(newErode, q1);
 				}
 			}
@@ -202,20 +204,20 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 #ifdef DEBUG
 		//destroyAllWindows();
 #endif
-	}
-#ifdef DEBUG
-	auto temp5 = checkerboard.clone();
+	//}
+#ifdef DEBUG_QUADS
+	auto temp7 = checkerboard.clone();
 	for (Quad q : quads)
 	{
-		rectangle(temp5, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
-		rectangle(temp5, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
-		rectangle(temp5, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
-		rectangle(temp5, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
+		rectangle(temp7, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
+		rectangle(temp7, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
+		rectangle(temp7, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
+		rectangle(temp7, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
 	}
 
 
 	// Debug display
-	imshow("all quads", temp5);
+	imshow("all quads", temp7);
 	waitKey(0);
 #endif
 	
@@ -292,7 +294,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 				rectangle(temp, q2.points[2], q2.centre, (128, 128, 128), CV_FILLED);
 				rectangle(temp, q2.points[3], q2.centre, (128, 128, 128), CV_FILLED);
 
-				circle(temp, q1.centre, 2*diag1, (128, 128, 128), 2);
+				circle(temp, q1.centre, (int)2*diag1, (128, 128, 128), 2);
 
 				// Debug display
 				imshow("The two quads under consideration", temp);
@@ -503,8 +505,8 @@ float GetReprojectionError(const Mat& img, const Mat& checkerboard,const vector<
 		Vector3f Hx = H * x;
 		Hx /= Hx(2);
 		// Put everything into the same coordinates
-		auto newQ2centre = Point2f(Hx(0)*gtSize.x, Hx(1)*gtSize.y);
-		auto newQ1centre = Point2f(q1.centre.x*gtSize.x, q1.centre.y*gtSize.y);
+		auto newQ2centre = Point2f(Hx(0)/*gtSize.x*/, Hx(1)/*gtSize.y*/);
+		auto newQ1centre = Point2f(q1.centre.x/*gtSize.x*/, q1.centre.y/*gtSize.y*/);
 
 		// This is in normalised coords
 		e += L2norm(newQ1centre - newQ2centre);
@@ -550,10 +552,10 @@ float GetReprojectionError(const Mat& img, const Mat& checkerboard,const vector<
 		imshow("secondary reproj error quad gt", temp1);
 		waitKey(0);*/
 
-		Vector3f x2(q2_1.centre.x/size.x, q2_1.centre.y/size.y, 1);
+		Vector3f x2(q2_1.centre.x/*size.x*/, q2_1.centre.y/*size.y*/, 1);
 		Vector3f Hx2 = H * x2;
 		Hx2 /= Hx2(2);
-		auto newQ2_1centre = Point2f(Hx2(0)*gtSize.x, Hx2(1)*gtSize.y);
+		auto newQ2_1centre = Point2f(Hx2(0)/*gtSize.x*/, Hx2(1)/*gtSize.y*/);
 
 		e += L2norm(q1_1.centre - newQ2_1centre);
 	}
@@ -567,9 +569,6 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 
 	// Find the four corners of the gt quads and mark them
 	// The topmost leftmost is 1, rightmost is 5, bottom left 28, bottom right 32
-
-	// TODO: make these indices
-
 	Quad topleft = gtQuads[0];
 	Quad topright = gtQuads[0];
 	Quad bottomleft = gtQuads[0];
@@ -638,11 +637,11 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		// Normalise the points for the homography matching
 		for (int j = 0; j < 4; ++j)
 		{
-			corners[j].centre.x /= (float)img.cols;
-			corners[j].centre.y /= (float)img.rows;
+			//corners[j].centre.x /= (float)img.cols;
+			//corners[j].centre.y /= (float)img.rows;
 
-			gtCorners[j].centre.x /= (float)checkerboard.cols;
-			gtCorners[j].centre.y /= (float)checkerboard.rows;
+			//gtCorners[j].centre.x /= (float)checkerboard.cols;
+			//gtCorners[j].centre.y /= (float)checkerboard.rows;
 		}
 
 		// Iterate over all permutations
@@ -657,6 +656,31 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			matches.push_back(pair<Point2f, Point2f>(corners[(i+2)%4].centre, gtCorners[2].centre));
 			matches.push_back(pair<Point2f, Point2f>(corners[(i+3)%4].centre, gtCorners[3].centre));
 
+			// Display the planned corners
+			/*Mat temp8 = checkerboard.clone();
+			for (int k = 0; k < 4; ++k)
+			{
+				auto p = Point2f(gtCorners[k].centre.x, gtCorners[k].centre.y);
+				putText(temp8, std::to_string(k), p,
+					FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+			}
+			imshow("gtCorners", temp8);
+			Mat temp9 = img.clone();
+			auto p = Point2f(corners[i].centre.x, corners[i].centre.y );
+			putText(temp9, std::to_string(0), p,
+					FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+			p = Point2f(corners[(i + 1) % 4].centre.x, corners[(i + 1) % 4].centre.y );
+			putText(temp9, std::to_string(1), p,
+				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+			p = Point2f(corners[(i + 2) % 4].centre.x, corners[(i + 2) % 4].centre.y);
+			putText(temp9, std::to_string(2), p,
+				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+			p = Point2f(corners[(i + 3) % 4].centre.x, corners[(i + 3) % 4].centre.y);
+			putText(temp9, std::to_string(3), p,
+				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+			imshow("captured corners", temp9);
+			cv::waitKey(0);*/
+
 			Matrix3f h;
 			if (!GetHomographyFromMatches(matches, h))
 			{
@@ -664,10 +688,41 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 				continue;
 			}
 
+			Mat temp6 = checkerboard.clone();
+			for (Quad q : quads)
+			{
+				Vector3f x(q.centre.x, q.centre.y, 1);
+				Vector3f Hx = h * x;
+				Hx /= Hx(2);
+				auto centre = Point2f(Hx(0), Hx(1));
+
+				//centre.x *= (float)temp6.cols;
+				//centre.y *= (float)temp6.rows;
+
+				if (!IsInBounds(temp6.rows, temp6.cols, centre))
+				{
+					continue;
+				}
+
+				if (q.number != 0)
+				{
+					putText(temp6, std::to_string(q.number), centre,
+						FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+				}
+				else {
+					circle(temp6, centre, 20, (128, 128, 128), -1);
+				}
+
+			}
+			// Debug display
+			imshow("homography under consideration", temp6);
+			cv::waitKey(0);
+
 			// How mcuh error did this iteration get?
 			vector<int> indices = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
 			float e = GetReprojectionError(img, checkerboard, gtQuads, quads, gtCorners, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), corners, indices, h);
-  			if (e < minError)
+			cout << "Error this homography: " << e << endl;
+			if (e < minError)
 			{
 				minError = e;
 				perm[0] = indices[0];
@@ -701,25 +756,17 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			}
 			if (q.id == corners[perm[2]].id)
 			{
-				q.number = 28;
+				q.number = 32;
 			}
 			if (q.id == corners[perm[3]].id)
 			{
-				q.number = 32;
+				q.number = 28;
 			}
 		}
 	}
-	else if (corners.size() == 3 || corners.size() == 2)
-	{
-		// Just use two. It's simplest
-		// Or, for now, could just throw it away?
-
-		// For simplicity, throw it away
-		// we'll see how well we do on other images
- 		return false;
-	}
 	else
 	{
+		cout << "Not enough corners" << endl;
 		// This image was clearly pretty bad. Throw it away
 		return false;
 	}
@@ -728,20 +775,25 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	Mat temp6 = checkerboard.clone();
 	for (Quad q : quads)
 	{
-		Vector3f x(q.centre.x / (float)img.cols, q.centre.y / (float)img.rows, 1);
+		Vector3f x(q.centre.x, q.centre.y, 1);
 		Vector3f Hx = H * x;
 		Hx /= Hx(2);
 		auto centre = Point2f(Hx(0), Hx(1));
-
-		centre.x *= (float)temp6.cols;
-		centre.y *= (float)temp6.rows;
 
 		if (!IsInBounds(temp6.rows, temp6.cols, centre))
 		{
 			continue;
 		}
 
-		circle(temp6, centre, 20, (128, 128, 128), -1);
+		if (q.number != 0)
+		{
+			putText(temp6, std::to_string(q.number), centre,
+				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+		}
+		else {
+			circle(temp6, centre, 20, (128, 128, 128), -1);
+		}
+		
 	}
 	// Debug display
 	imshow("Final homography", temp6);
@@ -751,7 +803,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	// We just need the smallest projection error, really
 
 	// Now number quads
-	TransformAndNumberQuads(H, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), quads);
+	TransformAndNumberQuads(H, checkerboard, Point2f(img.cols, img.rows), quads);
 
 	return true;
 }
@@ -766,17 +818,17 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	or not another quad is in the same column or row
 
 */
-void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, const Point2f size, std::vector<Quad>& quads)
+void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, const Point2f size, std::vector<Quad>& quads)
 {
 	int currentQuadIndex = 1;
 
 	// First, transform all quads
 	for (Quad& q : quads)
 	{
-		Vector3f x(q.centre.x / size.x, q.centre.y / size.y, 1);
+		Vector3f x(q.centre.x, q.centre.y, 1);
 		Vector3f Hx = H * x;
 		Hx /= Hx(2);
-		q.centre = Point2f(Hx(0)*gtSize.x, Hx(1)*gtSize.y);
+		q.centre = Point2f(Hx(0), Hx(1));
 	}
 
 	// Do each row separately, hardcoded
@@ -799,6 +851,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	if (indexQ1 == -1 || indexQ5 == -1)
 	{
 		// we failed? Return. SHould have an error code. At least false?
+		cout << "Couldn't find quads 1 and 5" << endl;
 		return;
 	}
 	
@@ -809,8 +862,15 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	l.p1 = q1.centre;
 	l.p2 = q5.centre;
 
+	// Debug - draw this line
+	Mat temp = checkerboard.clone();
+	line(temp, l.p1, l.p2, (128, 128, 128), 1);
+	imshow("lines", temp);
+	waitKey(0);
+
 	// Find the three other quads whose centres lie within half a diagonal's length of the line
 	float bound = GetLongestDiagonal(q1)/2;
+	cout << "top line bound is " << bound << endl;
 	vector<Quad*> quadsInRow;
 	// make this a list of indices
 	for (int i = 0; i < quads.size(); ++i)
@@ -857,6 +917,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	// Precautionary
 	if (indexQ6 == -1 || indexQ9 == -1)
 	{
+		cout << "Couldn't find quads 6 and 9" << endl;
 		return;
 	}
 
@@ -921,6 +982,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	}
 	if (indexQ10 == -1 || indexQ14 == -1)
 	{
+		cout << "Couldn't find quads 10 and 14" << endl;
 		// we failed? Return. SHould have an error code. At least false?
  		return;
 	}
@@ -988,6 +1050,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	if (indexQ15 == -1 || indexQ18 == -1)
 	{
 		// we failed? Return. SHould have an error code. At least false?
+		cout << "Couldn't find quads 15 and 18" << endl;
 		return;
 	}
 
@@ -1053,6 +1116,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	if (indexQ19 == -1 || indexQ23 == -1)
 	{
 		// we failed? Return. SHould have an error code. At least false?
+		cout << "Couldn't find quads 19 and 23" << endl;
 		return;
 	}
 
@@ -1118,6 +1182,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	if (indexQ24 == -1 || indexQ27 == -1)
 	{
 		// we failed? Return. SHould have an error code. At least false?
+		cout << "Couldn't find quads 24 and 27" << endl;
 		return;
 	}
 
@@ -1183,6 +1248,7 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	if (indexQ28 == -1 || indexQ32 == -1)
 	{
 		// we failed? Return. SHould have an error code. At least false?
+		cout << "Couldn't find quads 28 and 32" << endl;
 		return;
 	}
 
@@ -1216,57 +1282,11 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Point2f gtSize, con
 	// Transform them back
 	for (Quad& q : quads)
 	{
-		Vector3f x(q.centre.x / gtSize.x, q.centre.y / gtSize.y, 1);
+		Vector3f x(q.centre.x , q.centre.y, 1);
 		Vector3f Hx = H.inverse() * x;
 		Hx /= Hx(2);
-		q.centre = Point2f(Hx(0)*size.x, Hx(1)*size.y);
+		q.centre = Point2f(Hx(0), Hx(1));
 	}
-}
-
-/*
-	Get the intrinsic and extrinsic parameters from the homography
-
-	THIS DOES NOT QORK NEED QR DECOMPOSITIOn
-
-	// Decompose into K matrix and extrinsics
-	// upper triangular numpty
-	// perform LDLT decomposition
-	// normalise first L, that's K
-	// This is because K is already upper triangular
-
-	// DLT is the homography
-	// Make sure r1 and r2 are orthogonal
-*/
-bool ComputeIntrinsicsAndExtrinsicFromHomography(const Matrix3f& H, Matrix3f& K, Matrix3f& T)
-{
-	LDLT<Matrix3f> ldlt(3);
-
-	ldlt.compute(H);
-
-	auto L = ldlt.matrixL();
-	K = L;
-	auto DLT = K.inverse() * H;
-
-	// Now to get the homography
-	// So we have a three-by-three for rotation, except one of the rotation vectors
-	// is irrelevant and I've forgotten why, and therefor the last bit is the translation
-
-	// Set T = DL^T
-    // Check that the first two columns are orthogonal
-	T = DLT;
-	Vector3f r0 = T.col(0);
-	Vector3f r1 = T.col(1);
-
-	// Can we coerce these into being orthogonal?
-
-	// r0 dot r1 should be 0
-	if (r0.dot(r1) != 0)
-	{
-		cout << "Rotation vectors are not orthogonal!" << endl; // not yet
-		//return false;
-	}
-
-	return true;
 }
 
 /*
@@ -1327,7 +1347,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 		// [  v_12 transpose         ] 
 		// [  (v_11 - v_22) transpose] b = 0
 		// as per zhang, so form these equations in V
-		V(2 * i, 0) = v12(0);
+		V((long)2 * i, 0) = v12(0);
 		V(2 * i, 1) = v12(1);
 		V(2 * i, 2) = v12(2);
 		V(2 * i, 3) = v12(3);

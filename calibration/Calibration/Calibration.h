@@ -33,10 +33,8 @@ float L2norm(cv::Point a);
 /* Calibration functions */
 bool CheckerDetection(const cv::Mat& checkerboard, std::vector<Quad>& quads, bool debug);
 
-bool ComputeIntrinsicsAndExtrinsicFromHomography(const Eigen::Matrix3f& H, Eigen::Matrix3f& K, Eigen::Matrix3f& T);
-
 bool GetHomographyAndMatchQuads(Eigen::Matrix3f& H, const cv::Mat& img, const cv::Mat& checkerboard, std::vector<Quad>& gtQuads, std::vector<Quad>& quads);
 
-void TransformAndNumberQuads(const Eigen::Matrix3f& H, const cv::Point2f gtSize, const cv::Point2f size, std::vector<Quad>& quads);
+void TransformAndNumberQuads(const Eigen::Matrix3f& H, const cv::Mat& checkerboard, const cv::Point2f size, std::vector<Quad>& quads);
 
 bool ComputeCalibration(const std::vector<Calibration>& estimates, Eigen::Matrix3f& K);

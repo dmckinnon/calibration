@@ -7,7 +7,7 @@
 
 struct Contour
 {
-	static enum DIRECTION
+	enum DIRECTION
 	{
 		UP, 
 		UPLEFT, 
@@ -36,6 +36,25 @@ struct Quad
 	int numLinkedCorners;
 	float size;
 	float angleToCentre;
+	
+	Quad& operator=(const Quad& a)
+	{
+		points[0] = a.points[0];
+		points[1] = a.points[1];
+		points[2] = a.points[2];
+		points[3] = a.points[3];
+		centre = a.centre;
+		id = a.id;
+		number = a.number;
+		numLinkedCorners = a.numLinkedCorners;
+		size = a.size;
+		angleToCentre = a.angleToCentre;
+		associatedCorners[0] = a.associatedCorners[0];
+		associatedCorners[1] = a.associatedCorners[1];
+		associatedCorners[2] = a.associatedCorners[2];
+		associatedCorners[3] = a.associatedCorners[3];
+		return *this;
+	}
 };
 
 struct LineSegment
@@ -102,3 +121,6 @@ bool OrderTwoQuadsByAscendingCentreX(Quad a, Quad b);
 
 // DEBUG - draw quad in an image
 void DrawQuad(const cv::Mat& input, const Quad& q);
+
+// DEBUG - draw a line
+void DrawLine(const cv::Mat& input, const LineSegment l);

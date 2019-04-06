@@ -69,40 +69,6 @@ using namespace Eigen;
 	  Need to guarantee good checker detection
 	- Read P3P
 
-	First step:
-	- Have all the images the same size. Have the homography in unnormalised coords???
-	- consistent accurate checker detection. 
-	  Make a global threshold, and perhaps a better contour detector?
-	  I don't think I need a better contour detector - scarramuzza's idea of several layers is actually
-	  really robust. What I do need is an error threshold for the reprojection error for the homography guesstimates
-	  How do I guarantee on good images that we always get enough checkers? RANSAC upping the limits does some, 
-	  but still my checker detection is neither consistent nor incredibly robust
-
-	  Ok I think I fixed a bunch of issues here
-
-	  Do I have the homography around the wrong way? K takes camera points and converts them to real world points
-	  The synthetic image is "real world". Therefore ... H takes captured points to synthetic points. 
-	  So we are estimating K correctly
-
-	  Ok so now we do refinement on the distortion-free model. 
-
-	  Then add just distortion parameter estimation. 
-
-	  Then add distortion to the refinement model
-	  
-	- What did I just do that broke it? The homography error is huge now
-
-	- I thikn I am not computing the calibration matrix correctly. Check this first before sinking a lot
-	  into refinement
-	  Confirm all the mathematics for calibration computation
-
-	  I think I 
-	  a) need to get better data
-	  b) make the first part of the algorithm considerably more robust
-
-	  print a checkerboard with the checkers already separated
-	  this avoids the need to erode and iterate 
-
 
 
 	  NEW PLAN:
@@ -114,6 +80,14 @@ using namespace Eigen;
 	  - Hopefully this gives a good set of solutions, and from there I can work better
 
 	  If this continues to fail ... May. If no progress by May, then go to stereo
+
+	  -------------------
+	  Logs:
+	  - Numbering borked
+	  - some images get 33 qquads?
+	  - not all get homography? Even when all quads are there?
+	    This is to do with corner linking. probably a bug here
+
 
 
 */
@@ -194,7 +168,7 @@ int main(int argc, char** argv)
 	gtQuads[topright].number = 5;
 	gtQuads[bottomleft].number = 28;
 	gtQuads[bottomright].number = 32;
-	TransformAndNumberQuads(I, Point2f(checkerboard.cols, checkerboard.rows), Point2f(checkerboard.cols, checkerboard.rows), gtQuads);
+	TransformAndNumberQuads(I, checkerboard, Point2f(checkerboard.cols, checkerboard.rows), gtQuads);
 
 
 	// DEBUG
@@ -220,9 +194,9 @@ int main(int argc, char** argv)
 		}
 	}
 
-#ifdef DEBUG
+//#ifdef DEBUG
 	
-
+	Mat temp = checkerboard.clone();
 	// Draw all the quad centres after the transformation
 	// on the image
 	for (Quad q : gtQuads)
@@ -233,9 +207,9 @@ int main(int argc, char** argv)
 
 
 	// Debug display
-	imshow(debugWindowName, temp);
+	imshow("debug", temp);
 	waitKey(0);
-#endif
+//#endif
 
 
 
@@ -329,15 +303,10 @@ int main(int argc, char** argv)
 		Mat temp3 = checkerboard.clone();
 		for (Quad q : quads)
 		{
-			Matrix3f N;
-			N.setZero();
-			N(0, 0) = 1 / (float)img.cols;
-			N(1, 1) = 1 / (float)img.rows;
-			N(2, 2) = 1;
 			Vector3f x(q.centre.x, q.centre.y, 1);
-			Vector3f Hx = H * N * x;
+			Vector3f Hx = H * x;
 			Hx /= Hx(2);
-			auto qCentre = Point2f(Hx(0)*temp3.cols, Hx(1)*temp3.rows);
+			auto qCentre = Point2f(Hx(0), Hx(1));
 
 			putText(temp3, std::to_string(q.number), qCentre,
 				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
@@ -352,15 +321,9 @@ int main(int argc, char** argv)
 		// Store
 		// Need to store all our homographies in non-normalised coords
 		// Multiply on the right by the normalisation
-		Matrix3f N;
-		N.setZero();
-		N(0, 0) = 1 / (float)img.cols;
-		N(1, 1) = 1 / (float)img.rows;
-		N(2, 2) = 1;
 		Calibration c;
-		c.H = (H*N).inverse();
+		c.H = H.inverse();
 		c.quads = quads;
-		// TODO: every captured image has to be the same size!!
 		c.size = Point2f(img.cols, img.rows);
 		calibrationEstimates.push_back(c);
 
