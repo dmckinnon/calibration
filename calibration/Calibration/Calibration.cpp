@@ -17,9 +17,9 @@ using namespace Eigen;
 //#define DEBUG
 //#define DEBUG_CORNERS
 //#define DEBUG_THRESHOLD
-#define DEBUG_HOMOGRAPHY
-#define DEBUG_DRAW_HOMOGRAPHY
-#define DEBUG_QUADS
+//#define DEBUG_HOMOGRAPHY
+//#define DEBUG_DRAW_HOMOGRAPHY
+//#define DEBUG_QUADS
 
 /*
 	Align checkerboard.
@@ -633,17 +633,6 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		// get them clockwise, not anticlockwise
 		sort(corners.begin(), corners.end(), CompareQuadByAngleToCentre);
 
-		// This gives us only four possibilities, of which only two should work
-		// Normalise the points for the homography matching
-		for (int j = 0; j < 4; ++j)
-		{
-			//corners[j].centre.x /= (float)img.cols;
-			//corners[j].centre.y /= (float)img.rows;
-
-			//gtCorners[j].centre.x /= (float)checkerboard.cols;
-			//gtCorners[j].centre.y /= (float)checkerboard.rows;
-		}
-
 		// Iterate over all permutations
 		float minError = 100000000;
 		int perm[] = { 0,1,2,3 };
@@ -688,40 +677,10 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 				continue;
 			}
 
-			Mat temp6 = checkerboard.clone();
-			for (Quad q : quads)
-			{
-				Vector3f x(q.centre.x, q.centre.y, 1);
-				Vector3f Hx = h * x;
-				Hx /= Hx(2);
-				auto centre = Point2f(Hx(0), Hx(1));
-
-				//centre.x *= (float)temp6.cols;
-				//centre.y *= (float)temp6.rows;
-
-				if (!IsInBounds(temp6.rows, temp6.cols, centre))
-				{
-					continue;
-				}
-
-				if (q.number != 0)
-				{
-					putText(temp6, std::to_string(q.number), centre,
-						FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-				}
-				else {
-					circle(temp6, centre, 20, (128, 128, 128), -1);
-				}
-
-			}
-			// Debug display
-			imshow("homography under consideration", temp6);
-			cv::waitKey(0);
-
 			// How mcuh error did this iteration get?
 			vector<int> indices = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
 			float e = GetReprojectionError(img, checkerboard, gtQuads, quads, gtCorners, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), corners, indices, h);
-			cout << "Error this homography: " << e << endl;
+			//cout << "Error this homography: " << e << endl;
 			if (e < minError)
 			{
 				minError = e;
@@ -800,8 +759,6 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 	waitKey(0);
 #endif
 
-	// We just need the smallest projection error, really
-
 	// Now number quads
 	TransformAndNumberQuads(H, checkerboard, Point2f(img.cols, img.rows), quads);
 
@@ -871,17 +828,9 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	l.p1 = q1.centre;
 	l.p2 = q5.centre;
 
-	// Debug - draw this line
-	Mat temp = checkerboard.clone();
-	line(temp, l.p1, l.p2, (128, 128, 128), 1);
-	imshow("lines", temp);
-	waitKey(0);
-
 	// Find the three other quads whose centres lie within half a diagonal's length of the line
 	float bound = GetLongestDiagonal(q1)/2;
-	cout << "top line bound is " << bound << endl;
 	vector<Quad*> quadsInRow;
-	// make this a list of indices
 	for (int i = 0; i < quads.size(); ++i)
 	{
 		float d = abs(PointDistToLineSigned(quads[i].centre, q1.centre, q5.centre));
@@ -891,20 +840,8 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 		}
 	}
 
-	// ERROR: 
-	// Quads getting buggered here
-
-
 	// Order all these quads by x coord
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
-
-	// DEBUG - draw the quads we have
-	for (Quad* q : quadsInRow)
-	{
-		temp = DrawQuad(temp, *q);
-	}
-	imshow("quadsThisRow", temp);
-	waitKey(0);
 
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
@@ -914,8 +851,6 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	}
 	q5.number = 5;
 	currentQuadIndex = 6;
-
-	DrawQuadsNumbered(checkerboard, quads);
 
 	// Number the two attached to q1 and q5
 	int indexQ6 = -1;
@@ -951,13 +886,6 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	l.p1 = q6.centre;
 	l.p2 = q9.centre;
 
-	// Debug - draw this line
-	temp = checkerboard.clone();
-	line(temp, l.p1, l.p2, (128, 128, 128), 1);
-	imshow("lines", temp);
-	waitKey(0);
-
-
 	bound = GetLongestDiagonal(q6) / 2;
 	quadsInRow.clear();
 	for (Quad& q : quads)
@@ -970,14 +898,6 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
 
-	// DEBUG - draw the quads we have
-	for (Quad* q : quadsInRow)
-	{
-		temp = DrawQuad(temp, *q);
-	}
-	imshow("quadsThisRow", temp);
-	waitKey(0);
-
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
@@ -986,9 +906,6 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	}
 	q9.number = 9;
 	currentQuadIndex = 10;
-
-	DrawQuadsNumbered(checkerboard, quads);
-
 
 	// Number the two attached to q1 and q5
 	int indexQ10 = -1;
@@ -1360,7 +1277,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	MatrixXf V;
 	V.resize(estimates.size() * 2, 6);
 	V.setZero();
-	for (unsigned int i = 0; i < estimates.size(); ++i)
+	for (size_t i = 0; i < estimates.size(); ++i)
 	{
 		// Compute the vectors 
 		const Matrix3f& H = estimates[i].H;
@@ -1397,7 +1314,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 		// [  v_12 transpose         ] 
 		// [  (v_11 - v_22) transpose] b = 0
 		// as per zhang, so form these equations in V
-		V((long)2 * i, 0) = v12(0);
+		V(2 * i, 0) = v12(0);
 		V(2 * i, 1) = v12(1);
 		V(2 * i, 2) = v12(2);
 		V(2 * i, 3) = v12(3);
@@ -1428,8 +1345,9 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	// which is the last as singular values come well-ordered
 	// B = (B11, B12, B22, B13, B23, B33)
 	VectorXf B(6);
-	B << v(0, 5), v(1, 5), v(2, 5),
-		v(3, 5), v(4, 5), v(5, 5);
+	// should be using column 5 but let's try something else: 4
+	B << v(0, 2), v(1, 2), v(2, 2),
+		v(3, 2), v(4, 2), v(5, 2);
 	cout << B << endl;
 	/*
 	Now that we have the parameters of B, compute parameters of K. 

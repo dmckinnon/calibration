@@ -19,7 +19,7 @@ using namespace Eigen;
 
 //#define DEBUG
 //#define DEBUG_DRAW_CHECKERS
-#define DEBUG_NUMBER_CHECKERS
+//#define DEBUG_NUMBER_CHECKERS
 #define DEBUG_CALIBRATION
 
 /*
@@ -83,10 +83,10 @@ using namespace Eigen;
 
 	  -------------------
 	  Logs:
-	  - Numbering borked
 	  - some images get 33 qquads?
 	  - not all get homography? Even when all quads are there?
 	    This is to do with corner linking. probably a bug here
+	  - Above bugs aside .... compute calibration not working. Returns all 0s
 
 
 
@@ -194,7 +194,7 @@ int main(int argc, char** argv)
 		}
 	}
 
-//#ifdef DEBUG
+#ifdef DEBUG
 	
 	Mat temp = checkerboard.clone();
 	// Draw all the quad centres after the transformation
@@ -209,7 +209,7 @@ int main(int argc, char** argv)
 	// Debug display
 	imshow("debug", temp);
 	waitKey(0);
-//#endif
+#endif
 
 
 
@@ -311,7 +311,7 @@ int main(int argc, char** argv)
 			putText(temp3, std::to_string(q.number), qCentre,
 				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
 
-			circle(temp3, qCentre, 20, (128, 128, 128), 2);
+			circle(temp3, qCentre, q.size, (128, 128, 128), 2);
 		}
 		// Debug display
 		imshow("Numbered and Hd", temp3);
@@ -323,6 +323,7 @@ int main(int argc, char** argv)
 		// Multiply on the right by the normalisation
 		Calibration c;
 		c.H = H.inverse();
+		c.H /= c.H(2, 2);
 		c.quads = quads;
 		c.size = Point2f(img.cols, img.rows);
 		calibrationEstimates.push_back(c);
@@ -449,19 +450,3 @@ int main(int argc, char** argv)
 	checkerboard.release();
 	return 0;
 }
-
-/*
-actual focal length 4.26mm
-
-5.18265  1.39654 -11.9578
-0  8.34271 -1.56449
-0        0        1
-
-5.01724 0.0489705  -11.2865
-0   7.67657  -1.29967
-0         0         1
-
-8.19454 -0.128172  -30.0512
-0   17.6206  -7.91782
-0         0         1
-*/
