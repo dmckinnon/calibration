@@ -829,6 +829,15 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 		Vector3f Hx = H * x;
 		Hx /= Hx(2);
 		q.centre = Point2f(Hx(0), Hx(1));
+
+		// Convert all corners too
+		for (int i = 0; i < 4; ++i)
+		{
+			Vector3f p(q.points[i].x, q.points[i].y, 1);
+			Vector3f Hp = H * p;
+			Hp /= Hp(2);
+			q.points[i] = Point2f(Hp(0), Hp(1));
+		}
 	}
 
 	// Do each row separately, hardcoded
@@ -882,8 +891,20 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 		}
 	}
 
+	// ERROR: 
+	// Quads getting buggered here
+
+
 	// Order all these quads by x coord
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
+
+	// DEBUG - draw the quads we have
+	for (Quad* q : quadsInRow)
+	{
+		temp = DrawQuad(temp, *q);
+	}
+	imshow("quadsThisRow", temp);
+	waitKey(0);
 
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
@@ -893,6 +914,8 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	}
 	q5.number = 5;
 	currentQuadIndex = 6;
+
+	DrawQuadsNumbered(checkerboard, quads);
 
 	// Number the two attached to q1 and q5
 	int indexQ6 = -1;
@@ -928,6 +951,13 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	l.p1 = q6.centre;
 	l.p2 = q9.centre;
 
+	// Debug - draw this line
+	temp = checkerboard.clone();
+	line(temp, l.p1, l.p2, (128, 128, 128), 1);
+	imshow("lines", temp);
+	waitKey(0);
+
+
 	bound = GetLongestDiagonal(q6) / 2;
 	quadsInRow.clear();
 	for (Quad& q : quads)
@@ -940,6 +970,14 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	}
 	sort(quadsInRow.begin(), quadsInRow.end(), CompareQuadByCentreX);
 
+	// DEBUG - draw the quads we have
+	for (Quad* q : quadsInRow)
+	{
+		temp = DrawQuad(temp, *q);
+	}
+	imshow("quadsThisRow", temp);
+	waitKey(0);
+
 	// Number
 	for (int i = 0; i < quadsInRow.size(); ++i)
 	{
@@ -948,6 +986,9 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	}
 	q9.number = 9;
 	currentQuadIndex = 10;
+
+	DrawQuadsNumbered(checkerboard, quads);
+
 
 	// Number the two attached to q1 and q5
 	int indexQ10 = -1;
@@ -1286,6 +1327,15 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 		Vector3f Hx = H.inverse() * x;
 		Hx /= Hx(2);
 		q.centre = Point2f(Hx(0), Hx(1));
+
+		// Convert all corners too
+		for (int i = 0; i < 4; ++i)
+		{
+			Vector3f p(q.points[i].x, q.points[i].y, 1);
+			Vector3f Hp = H.inverse() * p;
+			Hp /= Hp(2);
+			q.points[i] = Point2f(Hp(0), Hp(1));
+		}
 	}
 }
 

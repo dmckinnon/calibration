@@ -1005,7 +1005,7 @@ bool OrderTwoQuadsByAscendingCentreX(Quad a, Quad b)
 DEBUG
 Draw a quad in an image. Should be the image they were found in
 */
-void DrawQuad(const cv::Mat& input, const Quad& q)
+void DrawQuadAndDisplay(const cv::Mat& input, const Quad& q)
 {
 	Mat draw = input.clone();
 
@@ -1016,5 +1016,40 @@ void DrawQuad(const cv::Mat& input, const Quad& q)
 	}
 	namedWindow("quad");
 	imshow("quad", draw);
+	waitKey(0);
+}
+cv::Mat DrawQuad(const cv::Mat& input, const Quad& q)
+{
+	Mat draw = input.clone();
+
+	for (auto& p : q.points)
+	{
+		circle(draw, q.centre, 20, (128, 128, 128), -1);
+	}
+	return draw;
+}
+
+void DrawQuadsNumbered(const cv::Mat& input, const std::vector<Quad>& quads)
+{
+	Mat draw = input.clone();
+	for (Quad q : quads)
+	{
+		if (!IsInBounds(draw.rows, draw.cols, q.centre))
+		{
+			continue;
+		}
+
+		if (q.number != 0)
+		{
+			putText(draw, std::to_string(q.number), q.centre,
+				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
+		}
+		else {
+			circle(draw, q.centre, 20, (128, 128, 128), -1);
+		}
+
+	}
+	// Debug display
+	imshow("Quads", draw);
 	waitKey(0);
 }

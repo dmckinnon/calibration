@@ -120,7 +120,9 @@ float GetLongestDiagonal(const Quad& q);
 bool OrderTwoQuadsByAscendingCentreX(Quad a, Quad b);
 
 // DEBUG - draw quad in an image
-void DrawQuad(const cv::Mat& input, const Quad& q);
+void DrawQuadAndDisplay(const cv::Mat& input, const Quad& q);
+cv::Mat DrawQuad(const cv::Mat& input, const Quad& q);
+void DrawQuadsNumbered(const cv::Mat& input, const std::vector<Quad>& quads);
 
 // DEBUG - draw a line
 void DrawLine(const cv::Mat& input, const LineSegment l);
