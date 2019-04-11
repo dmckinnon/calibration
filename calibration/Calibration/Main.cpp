@@ -20,7 +20,7 @@ using namespace Eigen;
 //#define DEBUG
 //#define DEBUG_DRAW_CHECKERS
 //#define DEBUG_NUMBER_CHECKERS
-#define DEBUG_CALIBRATION
+//#define DEBUG_CALIBRATION
 
 /*
 	So for this next tutorial we are doing Zhang calibration. 
@@ -406,11 +406,12 @@ int main(int argc, char** argv)
 					 c.r[0][1], c.r[1][1], c.t[1],
 					 c.r[0][2], c.r[1][2], c.t[2];
 				H = K * H;
-				H = H.inverse();
+				H = H.inverse().eval();
+				H /= H(2, 2);
 				Vector3f x(q.centre.x, q.centre.y, 1);
 				Vector3f Hx = H*x;
 				Hx /= Hx(2);
-				auto qCentre = Point2f(Hx(0)*temp4.cols, Hx(1)*temp4.rows);
+				auto qCentre = Point2f(Hx(0), Hx(1));
 
 				putText(temp4, std::to_string(q.number), qCentre,
 					FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
@@ -433,8 +434,6 @@ int main(int argc, char** argv)
 	map<int, Quad> gtQuadMap;
 	for (Quad& q : gtQuads)
 	{
-		q.centre.x /= checkerboard.cols;
-		q.centre.y /= checkerboard.rows;
 		gtQuadMap[q.number] = q;
 	}
 

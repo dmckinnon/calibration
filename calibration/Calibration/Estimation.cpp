@@ -850,7 +850,7 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 				cout << "Computed image point: \n" << f << endl;
 				cout << "Image point: \n" << e << endl;
 
-				e = e - f;
+				e = e - f/f(2);
 
 				// Build the Jacobian
 				//     ( rx[0]   0   rx[1] rx[2]   0   |       | 

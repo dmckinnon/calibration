@@ -1336,7 +1336,11 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 		return false;
 	auto& v = svd.matrixV();
 
+	// Get the matrix of singular values, and find the index of the minimum
+	auto index = svd.nonzeroSingularValues();
+	int idx = index - 1;
 	cout << v << endl;
+	cout << "Nonzero singular values: " << index << endl;
 
 	// We get a six-vector out of this. Get the singular values for our vector
 	// see the code from work about this section. 
@@ -1346,9 +1350,10 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	// B = (B11, B12, B22, B13, B23, B33)
 	VectorXf B(6);
 	// should be using column 5 but let's try something else: 4
-	B << v(0, 2), v(1, 2), v(2, 2),
-		v(3, 2), v(4, 2), v(5, 2);
+	B << v(0, idx), v(1, idx), v(2, idx),
+		v(3, idx), v(4, idx), v(5, idx);
 	cout << B << endl;
+
 	/*
 	Now that we have the parameters of B, compute parameters of K. 
 	This is using Zhang's equations from his Appendix B, 
