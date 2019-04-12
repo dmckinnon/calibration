@@ -84,9 +84,10 @@ using namespace Eigen;
 	  -------------------
 	  Logs:
 	  - some images get 33 qquads?
+	  - Homograpy often doesn't work?
 	  - not all get homography? Even when all quads are there?
 	    This is to do with corner linking. probably a bug here
-	  - Above bugs aside .... compute calibration not working. Returns all 0s
+	  - Things are mostly good up to calibration
 
 
 
@@ -173,6 +174,7 @@ int main(int argc, char** argv)
 
 	// DEBUG
 	// COnfirm that all the quads are good
+#ifdef DEBUG
 	for (Quad q : gtQuads)
 	{
 		cout << "Quad number " << q.number << " has centre " << q.centre << endl;
@@ -194,7 +196,7 @@ int main(int argc, char** argv)
 		}
 	}
 
-#ifdef DEBUG
+
 	
 	Mat temp = checkerboard.clone();
 	// Draw all the quad centres after the transformation
@@ -445,7 +447,13 @@ int main(int argc, char** argv)
 	}
 
 	// All the estimates should have the new parameters now
+	cout << "K: " << endl << calibrationEstimates[0].K << endl;
 
 	checkerboard.release();
 	return 0;
 }
+/*
+1774.53 21.1188 848.329
+0    1702 40.9809
+0       0       1
+*/

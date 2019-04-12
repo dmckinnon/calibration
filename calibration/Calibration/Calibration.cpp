@@ -422,7 +422,7 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 #endif
 
 	// Make sure at least 90% of the desired number of quads have been found
-	if (quads.size() < 30)
+	if (quads.size() < 32)
 	{
 		return false;
 	}
@@ -1379,7 +1379,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	K(0, 1) = skew;
 	K(0, 2) = principalX;
 	K(1, 2) = principalY;
-	K /= lambda; // is this necessary?
+	//K /= lambda; // is this necessary?
 
 	return true;
 }

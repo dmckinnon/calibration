@@ -776,22 +776,22 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 	
 		I've computed the proper rotation according to Zhang
 
-		The calibration matrix could just be WAY off ... ?
-		Am I computing the calibration matrix correctly?
+		TODO:
+		finite diff
+		check the math for SE3 update
 
-		calibration matrix is somewhat fine? Skew should be small and it is ... 
-		but maybe other bits are not?
+		Try robust cost function?
 	
 	*/
 
 	Matrix3f K = estimates[0].K;
 
 	// L-M update parameter
-	float lambda = .001f;
+	float lambda = 1.f;
 	float prevError = 100000000; // Some massive number so that our first error is always acceptable
 	// Update all the estimates with the new parameters
 	float currError = 0;
-	for (int its = 0; its < 5/*MAX_BA_ITERATIONS*/; ++its)
+	for (int its = 0; its < MAX_BA_ITERATIONS; ++its)
 	{
 		// create the jacobian matrix
 		// create the update vector
@@ -824,20 +824,18 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 			for (int m = 0; m < c.quads.size(); ++m)
 			{
 				Point2f m_ij = c.quads[m].centre;
-				Point2f M_j = gtQuadMap[c.quads[m].number].centre;
-				cout << "GT point " << M_j << endl;
+				auto result = gtQuadMap.find(c.quads[m].number);
+				if (result == gtQuadMap.end())
+				{
+					continue;
+				}
+				Point2f M_j = result->second.centre;
+				//cout << "GT point " << M_j << endl;
 
-				// fill in R_PARAM once we know how to parameterise R
-				// Rodriguez
-				// or should I do R as an SE3?
-				// I'd rather do it as an SE3
 				Vector3f vM_j(M_j.x, M_j.y, 0);
 				Vector3f rx = c.R * vM_j + c.t; // This is an interim calculation stage for the error that makes everything later easier
-				//rx(0) = c.R(0,0) * M_j.x + c.R(0,1) * M_j.y + c.t[0];
-				//rx(1) = c.R(1,0) * M_j.x + c.R(1,1) * M_j.y + c.t[1];
-				//rx(2) = c.R(2,0) * M_j.x + c.R(2,1) * M_j.y + c.t[2];
 				Vector3f f = K * rx;
-				//f /= f(2); // normalise
+				f /= f(2); // normalise
 
 				Vector3f e(m_ij.x, m_ij.y, 1);
 				
@@ -847,10 +845,10 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 
 
 				//cout << "GT point: " << vM_j << endl;
-				cout << "Computed image point: \n" << f << endl;
-				cout << "Image point: \n" << e << endl;
+				//cout << "Computed image point: \n" << f << endl;
+				//cout << "Image point: \n" << e << endl;
 
-				e = e - f/f(2);
+				e = e - f;
 
 				// Build the Jacobian
 				//     ( rx[0]   0   rx[1] rx[2]   0   |       | 
@@ -880,7 +878,7 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 
 				// accumulate error this iteration
 				error_accum += e.norm();
-				cout << "Error this point: " << e.norm() << endl;
+				//cout << "Error this point: " << e.norm() << endl;
 			}
 		}
 
@@ -910,14 +908,16 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 			lambda /= 10;
 			prevError = currError;
 
-			cout << "Improving" << endl;
+			cout << "Improving, lambda = " << lambda << endl;
 		}
 		else
 		{
 			lambda *= 10;
 
-			cout << "Not improving" << endl;
+			cout << "Not improving, lambda = " << lambda << endl;
 		}
+
+		cout << "Update vector: " << update.norm() << endl;
 
 		// Now pull out the little bits of each update and apply them
 		// Each of the calibration updates just add
@@ -926,6 +926,8 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 		K(0, 1) += update(2);
 		K(0, 2) += update(3);
 		K(1, 2) += update(4);
+
+		// TODO: make sure the math is correct here
 
 		// update the poses with a left exponential update
 		// The following comes from Section 3.2, equations 77 to 84 of Ethan Eade's lie.pdf,
@@ -955,6 +957,8 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 			c.t = R * c.t + V * u;
 		}
 	}
+
+	estimates[0].K = K;
 
 	return true;
 }
