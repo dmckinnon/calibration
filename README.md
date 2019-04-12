@@ -58,6 +58,8 @@ Back on my panorama stitching tutorial, under the heading [Finding the best tran
 
 ## Links for reading:
 
+tips for image cal: https://pgaleone.eu/computer-vision/2018/03/04/camera-calibration-guidelines/
+
 
 http://staff.fh-hagenberg.at/burger/publications/reports/2016Calibration/Burger-CameraCalibration-20160516.pdf
 
