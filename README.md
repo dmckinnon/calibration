@@ -2,7 +2,7 @@
 
 TODO: comment all the code appropriately
 
-This exercise is to learn the basics of single camera calibration (can easily be extended to multiple views). As with my [last tutorial](https://github.com/dmckinnon/stitch), the best place to start is Main.cpp, where the components mentioned below are used in sequence. It's a little different in this one to panorama stitching, but I'vew tried to comment the code as best I can for maximum readability. This tutorial follows a paper written in 1998 by Microsoft Research researcher Zhang - [Zhang Calibration](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr98-71.pdf) - which is a simplistic yet sufficient method of calibrating a single camera using a checkerboard. His initial results and data can be found [here](https://www.microsoft.com/en-us/research/project/a-flexible-new-technique-for-camera-calibration-2/?from=http%3A%2F%2Fresearch.microsoft.com%2F~zhang%2Fcalib%2F). For another well-detailed, pseudo-coded explanation of Zhang, but with the mathematics fleshed out, see [this well-written paper by Burger](http://staff.fh-hagenberg.at/burger/publications/reports/2016Calibration/Burger-CameraCalibration-20160516.pdf).
+This exercise is to learn the basics of single camera calibration (can easily be extended to multiple views). As with my [last tutorial](https://github.com/dmckinnon/stitch), the best place to start is Main.cpp, where the components mentioned below are used in sequence. It's a little different in this one to panorama stitching, but I'vew tried to comment the code as best I can for maximum readability. It's not quite written in the same exercise-like format as panorama stitching, since there is less to tweak here and things are more prescribed than described. This tutorial follows a paper written in 1998 by Microsoft Research researcher Zhang - [Zhang Calibration](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr98-71.pdf) - which is a simplistic yet sufficient method of calibrating a single camera using a checkerboard. His initial results and data can be found [here](https://www.microsoft.com/en-us/research/project/a-flexible-new-technique-for-camera-calibration-2/?from=http%3A%2F%2Fresearch.microsoft.com%2F~zhang%2Fcalib%2F). For another well-detailed, pseudo-coded explanation of Zhang, but with the mathematics fleshed out, see [this well-written paper by Burger](http://staff.fh-hagenberg.at/burger/publications/reports/2016Calibration/Burger-CameraCalibration-20160516.pdf).
 
 # Contents:
 1. Overview of the README and Calibration
@@ -63,11 +63,21 @@ So now we have a captured set of checkers and we have numbered them in correspon
 ## Initial Parameter Estimation
 
 This is fairly simple in some ways, and complex in others. Once we have the correct association of checkers between the captured image and synthetic image, we can use those pairs of matching points to form a homography between the planes. For a detailed description of this process that I've already written and don't care to repeat, see [here](https://github.com/dmckinnon/stitch#finding-the-best-transform). This is done with SVD, which is explained in that link (There's a lot and I see little point in copying and pasting). 
-But then comes the not-obvious part, and I need to refer to Zhang. 
+But then comes the not-obvious part, and I need to refer to Zhang. In section 2.3, Zhang describes several constraints on the camera matrix, given a homography between the image and the synthetic checkers. Then in 3.1, he goes over a method to turn this into a system of linear equations for multiple homographies, such that solving these equations via SVD or some other method will yield the camera parameters (See Zhang, Appendix B). It's hard and it took me some working through to understand. If you don't understand it ... that's perfectly ok. If you're trying to implement it ... well, so long as you can type the math up correctly, that's what matters. 
+
+This system of linear equations yields a set of camera parameters that provide an initial linear-least-squares guess to fit all the homographies. Next, we refine, using all the centres of the checkers we detected. 
 
 ## Refinement
 
 Back on my panorama stitching tutorial, under the heading [Finding the best transform](https://github.com/dmckinnon/stitch#finding-the-best-transform), you'll see a sub-heading called Optimisation. That describes the same process we use here. It's not exactly the same, as we are optimising a mathematically different function, but the concepts are the same. 
+
+So the parameters we are optimising over are the intrinsic camera parameters - focal length in x and y, skew, and the principal point in x and in y - and the extrinsic parameters for each image; that is, the rotation and translation from the camera for that image to the 'camera' for the synthetic image. I use a six-vector for these - three rotation parameters and three translation parameters - and use an element of the [Special Euclidean group](http://planning.cs.uiuc.edu/node147.html) to represent and enact the rotation and translation. Finally, there are the camera distortion parameters, for which Zhang has two, k_0 and k_1 (see Zhang section 3.3 - these are polynomial coefficients). 
+This leads to one massive equation that we are trying to minimise. It boils down to:
+For each image
+    For each checker in the image
+        total_error += synthetic checker - lens_distortion * camera matrix * rotation and translation * captured checker
+        
+We then get the jacobian of this monstrous function with respect to all the parameters and as I explain better in my [other writing on optimisation](https://github.com/dmckinnon/stitch#finding-the-best-transform) we use this in the Levenberg-Marquardt algorithm to minimise this error.  
 
 ## other notes
 I freely admit that as a whole this doesn't function perfectly. Yes, mostly it runs, and it completes and prints out a camera matrix. I don't trust this camera matrix, and there are some weird bugs, like sometimes the homography faisl on checker sets it has previously succeeded on. I think this is a checker detection bug. However, the theory is correct. I've checked through it all. So you can rest assured on that. And it should give a sufficient start if you want to try this on your own. 
