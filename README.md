@@ -2,7 +2,7 @@
 
 TODO: comment all the code appropriately
 
-Feedback: stop mentioning last tutorial. Each must be standalone
+Feedback: This tutorial should be standalone
 
 This exercise is to learn the basics of single camera calibration (can easily be extended to multiple views). As with my [last tutorial](https://github.com/dmckinnon/stitch), the best place to start is Main.cpp, where the components mentioned below are used in sequence. It's a little different in this one to panorama stitching, but I'vew tried to comment the code as best I can for maximum readability. It's not quite written in the same exercise-like format as panorama stitching, since there is less to tweak here and things are more prescribed than described. 
 
@@ -75,7 +75,7 @@ This system of linear equations yields a set of camera parameters that provide a
 
 ## Refinement
 
-Back on my panorama stitching tutorial, under the heading [Finding the best transform](https://github.com/dmckinnon/stitch#finding-the-best-transform), you'll see a sub-heading called Optimisation. That describes the same process we use here. It's not exactly the same, as we are optimising a mathematically different function, but the concepts are the same. 
+[Under this description of how to find transforms](https://github.com/dmckinnon/stitch#finding-the-best-transform), you'll see a sub-heading called Optimisation. That describes the same process we use here. It's not exactly the same, as we are optimising a mathematically different function, but the concepts are the same. 
 
 So the parameters we are optimising over are the intrinsic camera parameters - focal length in x and y, skew, and the principal point in x and in y - and the extrinsic parameters for each image; that is, the rotation and translation from the camera for that image to the 'camera' for the synthetic image. I use a six-vector for these - three rotation parameters and three translation parameters - and use an element of the [Special Euclidean group](http://planning.cs.uiuc.edu/node147.html) to represent and enact the rotation and translation. Finally, there are the camera distortion parameters, for which Zhang has two, k_0 and k_1 (see Zhang section 3.3 - these are polynomial coefficients). 
 This leads to one massive equation that we are trying to minimise. It boils down to:
@@ -100,19 +100,9 @@ Thanks for reading - enjoy!
 
 ## Links for further reading:
 
-TODO: description for eahc
+Tips for how to best take photos for calibration: https://pgaleone.eu/computer-vision/2018/03/04/camera-calibration-guidelines/
 
-tips for image cal: https://pgaleone.eu/computer-vision/2018/03/04/camera-calibration-guidelines/
-
-http://staff.fh-hagenberg.at/burger/publications/reports/2016Calibration/Burger-CameraCalibration-20160516.pdf
-
-http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.220.534&rep=rep1&type=pdf
-
-https://staff.fnwi.uva.nl/l.dorst/hz/hz_app6_zhang.pdf
-
-http://www.cvlibs.net/software/libcbdetect/
-
-Scarramuzza - http://rpg.ifi.uzh.ch/docs/IROS08_scaramuzza_b.pdf
+An explanation of Levenberg-Marquardt, and of Zhang: https://staff.fnwi.uva.nl/l.dorst/hz/hz_app6_zhang.pdf
 
 
 
