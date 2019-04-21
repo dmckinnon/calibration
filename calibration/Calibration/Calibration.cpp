@@ -54,18 +54,10 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 
 	// Threshold the image
 	Mat temp = img.clone();
-	// downsample for this
 	if (!AverageThreshold(temp, img))
 	{
 		return false;
 	}
-
-#ifdef DEBUG_THRESHOLD
-	namedWindow("threshold", WINDOW_NORMAL);
-	imshow("threshold", img);
-	//if (debug)
-		waitKey(0);
-#endif
 
 	// Now we iterate over eroding and checking for quadrangles
 	// Erode alternating with the rect kernel and the cross kernel

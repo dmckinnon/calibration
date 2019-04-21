@@ -23,7 +23,7 @@ using namespace Eigen;
 //#define DEBUG_CALIBRATION
 
 /*
-	So for this next tutorial we are doing Zhang calibration. 
+	This tutorial is Zhang calibration. See README for details
 
 	Input:
 	- several frames of a full view of a checkerboard
@@ -48,52 +48,16 @@ using namespace Eigen;
 		All this is done over each frame. Once we have all these initial estimations, we perform bundle adjustment over all the parameters
 		to refine the camera matrix
 
-	TO add:
-	- distortion model
-
-	Test this all with P3P!
-
-
-	Issues:
-	- Check the math with homography decomposition
-	- Checker detection still very inconsistent
-	- Still getting NaN sometimes after SVD. Bad homographies?
-	  I keep getting so many NaNs! Why are detections non-deterministic??
-	  Only line detection should be nondeterministic
-
-	TODO:
-	- Possibly do refinement on final result
-	- sometimes getting sqrt of negative. Presumably from when 
-	  we are numbering badly and getting a bad homography, throwing everything off.
-	  We need to use only good homographies
-	  Need to guarantee good checker detection
-	- Read P3P
-
-
-
-	  NEW PLAN:
-	  - print separated checkerboard bigger
-	  - take fixed-focus shots from small but varying angles (Rajeev - or auto focus?)
-	  - remove iterating on erode, just do one iteration
-	  - this should be considerably more robust
-	    and should allow for better detection of errors later on
-	  - Hopefully this gives a good set of solutions, and from there I can work better
-
-	  If this continues to fail ... May. If no progress by May, then go to stereo
 
 	  -------------------
-	  Logs:
+	  Issues:
 	  - some images get 33 qquads?
-	  - Homograpy often doesn't work?
 	  - not all get homography? Even when all quads are there?
 	    This is to do with corner linking. probably a bug here
-	  - Things are mostly good up to calibration
 
 	  - Refinement jacobians are wrong
 	  - Initial estimate is wrong
 	  - corner linking is still buggy
-
-
 
 */
 int main(int argc, char** argv)
@@ -111,28 +75,24 @@ int main(int argc, char** argv)
 	string folder = argv[1];
 	int numImages = stoi(argv[2]);
 
-#ifdef DEBUG
-	std::string debugWindowName = "debug image";
-	namedWindow(debugWindowName);
-	
-#endif
-
 	/*******************************************/
 	/* Get data from ground truth checkerboard */
 
 	// Get ground truth checkerboard image
 	Mat checkerboard = imread(folder + "\\" + CHECKERBOARD_FILENAME, IMREAD_GRAYSCALE);
-#ifdef DEBUG
-	Mat temp = checkerboard.clone();
-#endif
 
+	/*
+		Realistically, we should have a file that just details the precise points
+		in this image, as it should be computer-generated. But it was good test data so I just detect them. 
+	*/
 	vector<Quad> gtQuads;
 	cout << "Finding checkers in synthetic image" << endl;
 	if (!CheckerDetection(checkerboard, gtQuads, false))
 	{
+		checkerboard.release();
+		cout << "Could not detect checkers in synthetic image" << endl;
 		return 1;
 	}
-	//checkerboard.release();
 
 	// identity homography for gt quads to not transform them
 	cout << "Numbering synthetic checkers" << endl;
@@ -176,86 +136,6 @@ int main(int argc, char** argv)
 	TransformAndNumberQuads(I, checkerboard, Point2f(checkerboard.cols, checkerboard.rows), gtQuads);
 
 
-	// DEBUG
-	// COnfirm that all the quads are good
-#ifdef DEBUG
-	for (Quad q : gtQuads)
-	{
-		cout << "Quad number " << q.number << " has centre " << q.centre << endl;
-		for (int i = 0; i < 4; ++i)
-		{
-			Quad q2;
-			bool found = false;
-			for (Quad& qt : gtQuads)
-			{
-				if (qt.id == q.associatedCorners[i].first)
-				{
-					q2 = qt;
-					found = true;
-					break;
-				}
-			}
-			if (!found) continue;
-			cout << "\tcorner " << q.points[i] << " connects to quad " << q2.number << " at corner " << q.associatedCorners[i].second << endl;
-		}
-	}
-
-
-	
-	Mat temp = checkerboard.clone();
-	// Draw all the quad centres after the transformation
-	// on the image
-	for (Quad q : gtQuads)
-	{
-		putText(temp, std::to_string(q.number), q.centre,
-			FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-	}
-
-
-	// Debug display
-	imshow("debug", temp);
-	waitKey(0);
-#endif
-	/*
-	// Convert to mm
-	// each square on the checkerboard is 25mm wide exactly.
-	// So the scale factor is checker width in pixels dividing 25mm
-	// Do this on top left quad
-	// Two of the corners have the same y coord, and different x coords - get this width
-	Quad q;
-	for (Quad q2 : gtQuads)
-	{
-		if (q2.number == 1)
-		{
-			q = q2;
-		}
-	}
-	float width = 0;
-	auto corner = q.points[0];
-	for (int i = 1; i < 4; ++i)
-	{
-		if ((corner.y - q.points[i].y) < 5)
-		{
-			width = abs(corner.x - q.points[i].x);
-			break;
-		}
-	}
-	float mmPerPixelInX = 25 / width;
-	// Now multiply all quad coords with this factor
-	// This puts them into mm
-	for (Quad& p : gtQuads)
-	{
-		for (int i = 0; i < 4; ++i)
-		{
-			p.points[i] *= mmPerPixelInX;
-		}
-		p.centre *= mmPerPixelInX;
-	}
-	// Now any operation with these should be in mm coordinates
-	*/
-
-
-
 	/*********************************/
 	/* Get data from captured images */
 
@@ -294,43 +174,6 @@ int main(int argc, char** argv)
 		}
 		cout << "Found " << quads.size() << " quads" << endl;
 
-#ifdef DEBUG_DRAW_CHECKERS
-		// DEBUG
-		// COnfirm that all the quads are good
-		Mat temp2 = img.clone();
-		for (Quad q : quads)
-		{
-			cout << "Quad id " << q.id << " has centre " << q.centre << endl;
-			for (int i = 0; i < 4; ++i)
-			{
-				Quad q2;
-				bool found = false;
-				for (Quad& qt : gtQuads)
-				{
-					if (qt.id == q.associatedCorners[i].first)
-					{
-						q2 = qt;
-						found = true;
-						break;
-					}
-				}
-				if (!found) continue;
-				cout << "\tcorner " << q.points[i] << " connects to quad " << q2.number << " at corner " << q.associatedCorners[i].second << endl;
-			}
-
-			putText(temp2, std::to_string(q.id), q.centre,
-				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(128, 128, 128), 1, CV_AA);
-			rectangle(temp2, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
-			rectangle(temp2, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
-			rectangle(temp2, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
-			rectangle(temp2, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
-		}
-		// Debug display
-		imshow("debug", temp2);
-		waitKey(0);
-#endif
-
-
 		// set up matches and create homography
 		cout << "Finding homography for captured checkers" << endl;
 		Matrix3f H;
@@ -340,36 +183,14 @@ int main(int argc, char** argv)
 			continue;
 		}
 
-		// DEBUG
-		// Draw the homographied quads
-#ifdef DEBUG_NUMBER_CHECKERS
-		Mat temp3 = checkerboard.clone();
-		for (Quad q : quads)
-		{
-			Vector3f x(q.centre.x, q.centre.y, 1);
-			Vector3f Hx = H * x;
-			Hx /= Hx(2);
-			auto qCentre = Point2f(Hx(0), Hx(1));
-
-			putText(temp3, std::to_string(q.number), qCentre,
-				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-
-			circle(temp3, qCentre, q.size, (128, 128, 128), 2);
-		}
-		// Debug display
-		imshow("Numbered and Hd", temp3);
-		waitKey(0);
-#endif
-
-		// TODO: should there be homography refinement here?
-		// Yes. Yes there should be
+		// Should there be homography refinement here?
+		// Yes. Yes there should be. I just haven't added it yet
 
 		// Store
 		// Need to store all our homographies in non-normalised coords
 		// Multiply on the right by the normalisation
 		Calibration c;
-		c.H = H.inverse();
-		cout << "Confirming inverse worked: " << endl << c.H* H << endl;
+		c.H = H.inverse(); 
 		c.H /= c.H(2, 2);
 		c.quads = quads;
 		c.size = Point2f(img.cols, img.rows);
@@ -391,12 +212,7 @@ int main(int argc, char** argv)
 	Matrix3f K;
 	if (ComputeCalibration(calibrationEstimates, K))
 	{
-		// TODO:
-		// is K in the right coordinates?
-		// How to avoid NaN?
-		cout << K << endl;
-		// print K
-		// or save to a file
+		cout << "Initial K: " << endl << K << endl;
 
 		for (auto& c : calibrationEstimates)
 		{
@@ -406,12 +222,12 @@ int main(int argc, char** argv)
 			// We only need the first two vectors
 			auto lambda = 1.f / (K.inverse() * Vector3f(c.H(0, 0), c.H(1, 0), c.H(2, 0))).norm();
 			auto r1 = lambda * K.inverse() * Vector3f(c.H(0,0), c.H(1,0), c.H(2,0));
-			c.r[0] = r1;// / r1.norm();
+			c.r[0] = r1;
 			auto r2 = lambda * K.inverse() * Vector3f(c.H(0, 1), c.H(1, 1), c.H(2, 1));
-			c.r[1] = r2;// / r2.norm();
+			c.r[1] = r2;
 			c.r[2] = c.r[0].cross(c.r[1]);
 			auto t = lambda * K.inverse() * Vector3f(c.H(0, 2), c.H(1, 2), c.H(2, 2));
-			c.t = t;// / t.norm();
+			c.t = t;
 
 			c.R << c.r[0][0], c.r[1][0], c.r[2][0],
 				c.r[0][1], c.r[1][1], c.r[2][1],
