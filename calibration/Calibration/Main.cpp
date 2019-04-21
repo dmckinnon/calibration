@@ -89,6 +89,10 @@ using namespace Eigen;
 	    This is to do with corner linking. probably a bug here
 	  - Things are mostly good up to calibration
 
+	  - Refinement jacobians are wrong
+	  - Initial estimate is wrong
+	  - corner linking is still buggy
+
 
 
 */
@@ -212,6 +216,43 @@ int main(int argc, char** argv)
 	imshow("debug", temp);
 	waitKey(0);
 #endif
+	/*
+	// Convert to mm
+	// each square on the checkerboard is 25mm wide exactly.
+	// So the scale factor is checker width in pixels dividing 25mm
+	// Do this on top left quad
+	// Two of the corners have the same y coord, and different x coords - get this width
+	Quad q;
+	for (Quad q2 : gtQuads)
+	{
+		if (q2.number == 1)
+		{
+			q = q2;
+		}
+	}
+	float width = 0;
+	auto corner = q.points[0];
+	for (int i = 1; i < 4; ++i)
+	{
+		if ((corner.y - q.points[i].y) < 5)
+		{
+			width = abs(corner.x - q.points[i].x);
+			break;
+		}
+	}
+	float mmPerPixelInX = 25 / width;
+	// Now multiply all quad coords with this factor
+	// This puts them into mm
+	for (Quad& p : gtQuads)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			p.points[i] *= mmPerPixelInX;
+		}
+		p.centre *= mmPerPixelInX;
+	}
+	// Now any operation with these should be in mm coordinates
+	*/
 
 
 
@@ -320,11 +361,15 @@ int main(int argc, char** argv)
 		waitKey(0);
 #endif
 
+		// TODO: should there be homography refinement here?
+		// Yes. Yes there should be
+
 		// Store
 		// Need to store all our homographies in non-normalised coords
 		// Multiply on the right by the normalisation
 		Calibration c;
 		c.H = H.inverse();
+		cout << "Confirming inverse worked: " << endl << c.H* H << endl;
 		c.H /= c.H(2, 2);
 		c.quads = quads;
 		c.size = Point2f(img.cols, img.rows);
@@ -350,7 +395,6 @@ int main(int argc, char** argv)
 		// is K in the right coordinates?
 		// How to avoid NaN?
 		cout << K << endl;
-		cout << K / K(2, 2) << endl;
 		// print K
 		// or save to a file
 
@@ -445,6 +489,12 @@ int main(int argc, char** argv)
 		cout << "Failed to refine our calibration" << endl;
 		return false;
 	}
+
+	
+	// TODO - have a different measure in y
+	// or print them so they are the same
+	//calibrationEstimates[0].K *= mmPerPixelInX;
+	//K(2, 2) = 1;
 
 	// All the estimates should have the new parameters now
 	cout << "K: " << endl << calibrationEstimates[0].K << endl;

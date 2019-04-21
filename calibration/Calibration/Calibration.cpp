@@ -558,6 +558,7 @@ float GetReprojectionError(const Mat& img, const Mat& checkerboard,const vector<
 		auto newQ2_1centre = Point2f(Hx2(0)/*gtSize.x*/, Hx2(1)/*gtSize.y*/);
 
 		e += L2norm(q1_1.centre - newQ2_1centre);
+		cout << "Error after " << i << " corners: " << e << endl;
 	}
 
 	return e;
@@ -674,13 +675,14 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			if (!GetHomographyFromMatches(matches, h))
 			{
 				// This permutation wasn't good enough
+				cout << "No homography from this matching" << endl;
 				continue;
 			}
 
 			// How mcuh error did this iteration get?
 			vector<int> indices = { i,(i + 1) % 4,(i + 2) % 4,(i + 3) % 4 };
 			float e = GetReprojectionError(img, checkerboard, gtQuads, quads, gtCorners, Point2f(checkerboard.cols, checkerboard.rows), Point2f(img.cols, img.rows), corners, indices, h);
-			//cout << "Error this homography: " << e << endl;
+			cout << "Error this homography: " << e << endl;
 			if (e < minError)
 			{
 				minError = e;
@@ -695,6 +697,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		if (minError > MIN_HOMOGRAPHY_ERROR)
 		{
 			// Nothing worked. Just bail
+			cout << "Too much error, at " << minError << endl;
 			return false;
 		}
 
@@ -1360,12 +1363,32 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	where B = lambda A-T A
 	Since we don't care about scale, we divide throughout by lambda once we have it
 	*/
+	// Use the difference computation to get these values?
+	// Give it a shot
+	// TODO: Burger's cpmputations oinstead oif Zhang's
+	// page 19
+
+	// Burger
+	// These are better, so did I get the zhang equations wrong? Perhaps off by a factor?
+	// But it's still wrong
+	float d = B(0) * B(2) - B(1) * B(1);
+	float w = B(0) * B(2) * B(5) - B(1) * B(1) * B(5) - B(0) * B(4) * B(4) + 2 * B(1) * B(3) * B(4) - B(2) * B(3) * B(3);
+	
+	float focalX = sqrt(w / (d*B(0)));
+	float focalY = sqrt(w* B(0) / (d*d));
+	float skew = B(1) * sqrt(w / (d * d * B(0)));
+	float principalX = (B(1)*B(4) - B(2)*B(3)) / d;
+	float principalY = (B(1) * B(3) - B(0) * B(4)) / d;
+	float lambda = 1;
+
+	/* Zhang
 	float principalY = (B(1)*B(3) - B(0)*B(4)) / (B(0)*B(2) - B(1)*B(1));
 	float lambda = B(5) - (B(3)*B(3) + principalY*(B(1)*B(3) - B(0)*B(4)))/B(0);
 	float focalX = sqrt(lambda/B(0));
 	float focalY = sqrt(lambda*B(0)/(B(0)*B(2) - B(1)*B(1)));
 	float skew = -B(1)*focalX*focalX*focalY/lambda;
 	float principalX = (skew*principalY/focalY) - B(3)*focalX*focalX/lambda;
+	*/
 	
 	// TODO:
 	// SOmetimes getting NaN cos taking sqrt of negative
@@ -1379,7 +1402,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	K(0, 1) = skew;
 	K(0, 2) = principalX;
 	K(1, 2) = principalY;
-	//K /= lambda; // is this necessary?
+	K /= K(2,2); // is this necessary?
 
 	return true;
 }

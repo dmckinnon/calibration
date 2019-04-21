@@ -779,8 +779,10 @@ bool RefineCalibration(std::vector<Calibration>& estimates, std::map<int, Quad> 
 		TODO:
 		finite diff
 		check the math for SE3 update
+		- redo jacobians. Jacobians do not take into account 3 vector to 2-vector
 
-		Try robust cost function?
+
+		
 	
 	*/
 

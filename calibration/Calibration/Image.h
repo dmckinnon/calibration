@@ -27,7 +27,7 @@ struct Contour
 
 struct Quad
 {
-	cv::Point points[4];
+	cv::Point2f points[4];
 	cv::Point2f centre;
 
 	int id;
