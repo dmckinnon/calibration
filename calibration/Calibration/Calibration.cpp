@@ -993,14 +993,11 @@ void TransformAndNumberQuads(const Eigen::Matrix3f& H, const Mat& checkerboard, 
 	Given a series of correspondences between images (in normalised coords),
 	compute a pinhole model calibration, if possible, and return it
 
-	TODO - explain how Zhang does it
-	name matrix S, not V
+	This may seem a little arbitrary and magical, but Zhang computes constraints on the homographies
+	for the two checkerboard planes. Using these constraints, he creates a system of linear equations
+	in the terms of a matrix B = A.transpose() * A. We sovle this for B, then compute the values of A.
 
-	This homography is not the solution to it all, cos different equations have different rotations
-	etc but it encodes the calibration for the camera. We use the equations in Zhang, 1992, to solve
-	for the parameters of K. Then build the matrix, and return it. 
-
-	This can fail when the matrix S is rank deficient; that is, oversolved, such that rows conflict and
+	This can fail when the matrix V is rank deficient; that is, oversolved, such that rows conflict and
 	there are infinitely many solutions
 */
 bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
@@ -1014,7 +1011,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	{
 		// Compute the vectors 
 		const Matrix3f& H = estimates[i].H;
-		// These are 6-vectors, but eigen doesn
+		// These are 6-vectors
 		VectorXf v11(6);
 		VectorXf v12(6);
 		VectorXf v22(6);
@@ -1082,7 +1079,6 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	// which is the last as singular values come well-ordered
 	// B = (B11, B12, B22, B13, B23, B33)
 	VectorXf B(6);
-	// should be using column 5 but let's try something else: 4
 	B << v(0, idx), v(1, idx), v(2, idx),
 		v(3, idx), v(4, idx), v(5, idx);
 	cout << B << endl;
@@ -1095,7 +1091,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	*/
 	// Use the difference computation to get these values?
 	// Give it a shot
-	// TODO: Burger's cpmputations oinstead oif Zhang's
+	// TODO: Burger's computations instead if Zhang's
 	// page 19
 
 	// Burger
@@ -1132,7 +1128,7 @@ bool ComputeCalibration(const std::vector<Calibration>& estimates, Matrix3f& K)
 	K(0, 1) = skew;
 	K(0, 2) = principalX;
 	K(1, 2) = principalY;
-	K /= K(2,2); // is this necessary?
+	K /= K(2,2);
 
 	return true;
 }
