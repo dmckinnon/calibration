@@ -49,7 +49,7 @@ float L2norm(Point2f a)
 // Actual Function
 bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 {
-	// Make a copy
+	// Copy the image
 	Mat img = checkerboard.clone();
 
 	// Threshold the image
@@ -59,160 +59,55 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 		return false;
 	}
 
-	// Now we iterate over eroding and checking for quadrangles
-	// Erode alternating with the rect kernel and the cross kernel
-	// We stop when the iteration has produced no more quads than the previous iteration
-	// erode
-	// search for blobs
-	// match quads from blobs
-	// find quads in previous run
-	// Finally, we link the quadrangles
+	/*
+		The algorithm used to be as Scarramuzza - iteratively erode further, detecting quads
+		each iteration and combining these. 
+		However, now I used a checker pattern that doesn't touch at the corners, so there is no
+		need for erosion - we can just run quad detection on the thresholded image. 
+
+		The quad detection is blob detection. Fro each blob we mark every edge point - that is,
+		a black pixel that is next to a white pixel - and on these we run line detection. 
+		Each blob should have four lines, and from the intersections of these we get corners.
+		The corners bound the quad, and bam. 
+	*/
 	
-	bool kernelCrossOrRect = RECT;
-	int quadID = 0;
-	//for (int its = 0; its < MAX_ERODE_ITERATIONS; ++its)
-	//{
-		// erode the image
-		/*Mat erode = img.clone();
-		auto kernel = kernelCrossOrRect? rect : cross;
-		kernelCrossOrRect = !kernelCrossOrRect;
-		if (!Erode(img, erode, kernel))
-		{
-			continue;
-		}
-		img = erode;*/
-		// use downsampled version
-/*
-#ifdef DEBUG
-		namedWindow("erode", WINDOW_NORMAL);
-		imshow("erode", erode);
-		if (debug) waitKey(0);
-#endif*/
-
-		// Somehow go high res here?
-
-		// Find contours
-		vector<Contour> contours;
-		if (!FindContours(img, contours/*, debug*/))
-		{
-			return false;//continue;
-		}
-
-#ifdef DEBUG
-		// draw all the contours onto the eroded image
-		if (debug) DrawContours(img, contours);
-#endif
-
-
-
-		// get quadrangles from contours
-		vector<Quad> quadsThisIteration;
-		for (auto& c : contours)
-		{
-			Quad q;
-			if (FindQuad(img, c, q))
-			{
-				q.id = quadID++;
-				// Fill with obviously bad IDs
-				q.associatedCorners[0] = pair<int, int>(-1, -1);
-				q.associatedCorners[1] = pair<int, int>(-1, -1);
-				q.associatedCorners[2] = pair<int, int>(-1, -1);
-				q.associatedCorners[3] = pair<int, int>(-1, -1);
-				q.numLinkedCorners = 0;
-				q.size = 0;
-				q.number = 0;
-				for (int idx = 0; idx < 4; ++idx)
-				{
-					q.size += DistBetweenPoints(q.centre, q.points[idx])/4;
-				}
-
-				quadsThisIteration.push_back(q);
-			}
-		}
-
-#ifdef DEBUG
-		auto temp5 = img.clone();
-		for (Quad q : quads)
-		{
-			rectangle(temp5, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
-			rectangle(temp5, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
-			rectangle(temp5, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
-			rectangle(temp5, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
-		}
-
-
-		// Debug display
-		imshow("all quads so far", temp5);
-		waitKey(0);
-#endif
-
-		// Match with previous set of quads
-		// For each quad found this iteration,
-		// Is there one with a centre close enough (meaning within a quarter the longest diagonal)
-		// to this one, in the bigger pool of quads? If so, keep the existing and move on
-		// If not, add this one to the pool
-		if (!quads.empty())
-		{
-			for (const Quad& q1 : quadsThisIteration)
-			{
-				bool found = false;
-				Quad q;
-				for (const Quad& q2 : quads)
-				{
-					float diagLength = GetLongestDiagonal(q2) / 4.f;
-					if (DistBetweenPoints(q1.centre, q2.centre) < diagLength)
-					{
-						Mat newErode = img.clone();
-						Mat orig = img.clone();
-						if (debug)
-						{
-							//DrawQuad(orig, q2);
-							//DrawQuad(newErode, q1);
-						}
-
-						// This quad already exists. No need to search further
-						found = true;
-						break;
-					}
-				}
-				
-				if (!found)
-				{
-					// This quad wasn't found in previous iterations. Add it
-					quads.push_back(q1);
-					Mat newErode = img.clone();
-					//if (debug) DrawQuad(newErode, q1);
-				}
-			}
-		}
-		else {
-			// No quads exist yet. Keep everything
-			for (Quad& q : quadsThisIteration)
-			{
-				quads.push_back(q);
-			}
-		}
-
-#ifdef DEBUG
-		//destroyAllWindows();
-#endif
-	//}
-#ifdef DEBUG_QUADS
-	auto temp7 = checkerboard.clone();
-	for (Quad q : quads)
+	// Find contours in the thresholded image
+	vector<Contour> contours;
+	if (!FindContours(img, contours))
 	{
-		rectangle(temp7, q.points[0], q.centre, (128, 128, 128), CV_FILLED);
-		rectangle(temp7, q.points[1], q.centre, (128, 128, 128), CV_FILLED);
-		rectangle(temp7, q.points[2], q.centre, (128, 128, 128), CV_FILLED);
-		rectangle(temp7, q.points[3], q.centre, (128, 128, 128), CV_FILLED);
+		return false;
 	}
 
+	// From each contour derive quads or throw contour away
+	int quadID = 0;
+	vector<Quad> quadsThisIteration;
+	for (auto& c : contours)
+	{
+		Quad q;
+		if (FindQuad(img, c, q))
+		{
+			q.id = quadID++;
+			// Fill with dummy IDs
+			q.associatedCorners[0] = pair<int, int>(-1, -1);
+			q.associatedCorners[1] = pair<int, int>(-1, -1);
+			q.associatedCorners[2] = pair<int, int>(-1, -1);
+			q.associatedCorners[3] = pair<int, int>(-1, -1);
+			q.numLinkedCorners = 0;
+			q.size = 0;
+			q.number = 0;
+			for (int idx = 0; idx < 4; ++idx)
+			{
+				q.size += DistBetweenPoints(q.centre, q.points[idx])/4;
+			}
 
-	// Debug display
-	imshow("all quads", temp7);
-	waitKey(0);
-#endif
-	
+			quadsThisIteration.push_back(q);
+		}
+	}
+
+	for (Quad& q : quadsThisIteration)
+	{
+		quads.push_back(q);
+	}
 
 	// Link corners
 	// For each pair of quads, find any corners they share
@@ -366,54 +261,8 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 		}
 	}
 
-#ifdef DEBUG_CORNERS
-	
-	// for each quad, draw all the matching corners
-	for (int i = 0; i < quads.size(); ++i)
-	{
-		Quad q1 = quads[i];
-
-		Mat cornerImg = checkerboard.clone();
-
-		for (int j = 0; j < 4; ++j)
-		{
-			if (q1.associatedCorners[j].first != -1)
-			{
-				Quad q2;
-				bool found = false;
-				for (Quad& q : quads)
-				{
-					if (q.id == q1.associatedCorners[j].first)
-					{
-						q2 = q;
-						found = true; 
-						break;
-					}
-				}
-				if (!found) continue;
-				rectangle(cornerImg, q1.centre, q2.centre/*points[q1.associatedCorners[j].second]*/, Scalar(128, 128, 128), CV_FILLED);
-				line(cornerImg, q1.points[0], q1.points[1], Scalar(128, 128, 128), 2);
-				line(cornerImg, q1.points[1], q1.points[2], Scalar(128, 128, 128), 2);
-				line(cornerImg, q1.points[2], q1.points[3], Scalar(128, 128, 128), 2);
-				line(cornerImg, q1.points[3], q1.points[0], Scalar(128, 128, 128), 2);
-				line(cornerImg, q2.points[0], q2.points[1], Scalar(128, 128, 128), 2);
-				line(cornerImg, q2.points[1], q2.points[2], Scalar(128, 128, 128), 2);
-				line(cornerImg, q2.points[2], q2.points[3], Scalar(128, 128, 128), 2);
-				line(cornerImg, q2.points[3], q2.points[0], Scalar(128, 128, 128), 2);
-				break;
-			}
-		}
-
-		
-
-		imshow("cornerAssociation", cornerImg);
-		waitKey(0);
-	}
-
-	
-#endif
-
 	// Make sure at least 90% of the desired number of quads have been found
+	// I've upped this to 100% just because this should be guaranteed on the images we have
 	if (quads.size() < 32)
 	{
 		return false;
@@ -423,63 +272,16 @@ bool CheckerDetection(const Mat& checkerboard, vector<Quad>& quads, bool debug)
 }
 
 /*
-Find a corner quad from an edge quad, given a root edge quad and a branch to go down
-*/
-int FindCornerFromEdgeQuad(const Quad& root, const Quad& branch, vector<Quad>& quads, Quad& corner)
-{
-	Quad curQuad = branch;
-	int numQuadsAlongSide = 1;
-	do
-	{
-		// Find the index of the linked quad
-		int newIndex = -1;
-		for (int i = 0; i < 4; ++i)
-		{
-			if (curQuad.associatedCorners[i].first != -1)
-			{
-				// We alternate between quads with 4 and quads with 2
-				Quad nextQuad = quads[curQuad.associatedCorners[i].second];
-				// Check just to make sure we aren't going backwards - skip the root
-				if (nextQuad.centre == root.centre)
-				{
-					continue;
-				}
+	Find the homography between the captured checkerboard and the synthetic checkerboard. 
 
-
-				if (curQuad.numLinkedCorners == 4 && nextQuad.numLinkedCorners == 2)
-				{
-					curQuad = nextQuad;
-				}
-				else if (curQuad.numLinkedCorners == 2 && nextQuad.numLinkedCorners == 4)
-				{
-					curQuad = nextQuad;
-				}
-				else if (nextQuad.numLinkedCorners == 1)
-				{
-					// This is the corner quad!
-					curQuad = nextQuad;
-					corner = curQuad;
-					break;
-				}
-				newIndex = curQuad.associatedCorners[i].second;
-			}
-		}
-
-		if (newIndex < 0) continue;
-
-		// Get the next quad
-		numQuadsAlongSide++;
-
-	} while (curQuad.numLinkedCorners != 1);
-
-	return numQuadsAlongSide;
-}
-
-/*
-	Match the four extreme corners for the purposes of a homography
+	For each set of checkers, get the four corner checkers. We already have the correct numbering
+	for the synthetic ones. For the captured corner checkers, order them clockwise by angle to the
+	centre of the image. Try the homography of this match to the synthetics, and then rotate. For each,
+	test the reprojection error. Keep the homography with the smallest reprojection error. Since the corners
+	will always be perfect, the reprojection error includes the four checkers attached to the corner checkers
+	too. 
 */
 // Helper
-// just do reprojection error from the corner centres
 float GetReprojectionError(const Mat& img, const Mat& checkerboard,const vector<Quad>& gtQuads, const vector<Quad>& quads,
 	                       const Quad gtCorners[], const Point2f gtSize,
 	                       const Point2f size, const vector<Quad> corners, 
@@ -497,8 +299,8 @@ float GetReprojectionError(const Mat& img, const Mat& checkerboard,const vector<
 		Vector3f Hx = H * x;
 		Hx /= Hx(2);
 		// Put everything into the same coordinates
-		auto newQ2centre = Point2f(Hx(0)/*gtSize.x*/, Hx(1)/*gtSize.y*/);
-		auto newQ1centre = Point2f(q1.centre.x/*gtSize.x*/, q1.centre.y/*gtSize.y*/);
+		auto newQ2centre = Point2f(Hx(0), Hx(1));
+		auto newQ1centre = Point2f(q1.centre.x, q1.centre.y);
 
 		// This is in normalised coords
 		e += L2norm(newQ1centre - newQ2centre);
@@ -533,24 +335,12 @@ float GetReprojectionError(const Mat& img, const Mat& checkerboard,const vector<
 			}
 		}
 
-		// Debug display the corresponding quads
-		/*Mat temp = img.clone();
-		circle(temp, q2_1.centre, 20, (128, 128, 128), -1);
-		imshow("secondary reproj error quad", temp);
-		waitKey(0);
-
-		Mat temp1 = checkerboard.clone();
-		circle(temp1, q1_1.centre, 20, (128, 128, 128), -1);
-		imshow("secondary reproj error quad gt", temp1);
-		waitKey(0);*/
-
-		Vector3f x2(q2_1.centre.x/*size.x*/, q2_1.centre.y/*size.y*/, 1);
+		Vector3f x2(q2_1.centre.x, q2_1.centre.y, 1);
 		Vector3f Hx2 = H * x2;
 		Hx2 /= Hx2(2);
-		auto newQ2_1centre = Point2f(Hx2(0)/*gtSize.x*/, Hx2(1)/*gtSize.y*/);
+		auto newQ2_1centre = Point2f(Hx2(0), Hx2(1));
 
 		e += L2norm(q1_1.centre - newQ2_1centre);
-		cout << "Error after " << i << " corners: " << e << endl;
 	}
 
 	return e;
@@ -638,32 +428,8 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 			matches.push_back(pair<Point2f, Point2f>(corners[(i+2)%4].centre, gtCorners[2].centre));
 			matches.push_back(pair<Point2f, Point2f>(corners[(i+3)%4].centre, gtCorners[3].centre));
 
-			// Display the planned corners
-			/*Mat temp8 = checkerboard.clone();
-			for (int k = 0; k < 4; ++k)
-			{
-				auto p = Point2f(gtCorners[k].centre.x, gtCorners[k].centre.y);
-				putText(temp8, std::to_string(k), p,
-					FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-			}
-			imshow("gtCorners", temp8);
-			Mat temp9 = img.clone();
-			auto p = Point2f(corners[i].centre.x, corners[i].centre.y );
-			putText(temp9, std::to_string(0), p,
-					FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-			p = Point2f(corners[(i + 1) % 4].centre.x, corners[(i + 1) % 4].centre.y );
-			putText(temp9, std::to_string(1), p,
-				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-			p = Point2f(corners[(i + 2) % 4].centre.x, corners[(i + 2) % 4].centre.y);
-			putText(temp9, std::to_string(2), p,
-				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-			p = Point2f(corners[(i + 3) % 4].centre.x, corners[(i + 3) % 4].centre.y);
-			putText(temp9, std::to_string(3), p,
-				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-			imshow("captured corners", temp9);
-			cv::waitKey(0);*/
-
 			Matrix3f h;
+			// Use SVD to get the homography from these pairs
 			if (!GetHomographyFromMatches(matches, h))
 			{
 				// This permutation wasn't good enough
@@ -698,6 +464,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 #endif
 		H = homography;
 
+		// Number the corner quads using this homography
 		for (Quad& q : quads)
 		{
 			if (q.id == corners[perm[0]].id)
@@ -725,36 +492,7 @@ bool GetHomographyAndMatchQuads(Matrix3f& H, const Mat& img, const cv::Mat& chec
 		return false;
 	}
 
-#ifdef DEBUG_DRAW_HOMOGRAPHY
-	Mat temp6 = checkerboard.clone();
-	for (Quad q : quads)
-	{
-		Vector3f x(q.centre.x, q.centre.y, 1);
-		Vector3f Hx = H * x;
-		Hx /= Hx(2);
-		auto centre = Point2f(Hx(0), Hx(1));
-
-		if (!IsInBounds(temp6.rows, temp6.cols, centre))
-		{
-			continue;
-		}
-
-		if (q.number != 0)
-		{
-			putText(temp6, std::to_string(q.number), centre,
-				FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-		}
-		else {
-			circle(temp6, centre, 20, (128, 128, 128), -1);
-		}
-		
-	}
-	// Debug display
-	imshow("Final homography", temp6);
-	waitKey(0);
-#endif
-
-	// Now number quads
+	// Now number the rest of the quads
 	TransformAndNumberQuads(H, checkerboard, Point2f(img.cols, img.rows), quads);
 
 	return true;

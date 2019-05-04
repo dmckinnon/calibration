@@ -155,6 +155,7 @@ int main(int argc, char** argv)
 		cout << "Finding checkers in captured image" << endl;
 		int its = 0;
 		bool skip = false;
+		// We run this several times just in case, since there is some nondeterminism in the detection
 		while (!CheckerDetection(img, quads, false))
 		{
 			cout << "Bad image for checkers in image " << image + 1 << endl;
@@ -233,8 +234,6 @@ int main(int argc, char** argv)
 				c.r[0][1], c.r[1][1], c.r[2][1],
 				c.r[0][2], c.r[1][2], c.r[2][2];
 
-			// TODO:
-			// Compute a proper rotation using Zhang Appendix C
 			// The following computation comes from Zhang, Appendix C
 			
 			// We need to compute the singular value decomposition of Q
@@ -252,38 +251,6 @@ int main(int argc, char** argv)
 			auto& U = svd.matrixU();
 
 			c.R = U * V.transpose();
-
-
-			// Now test
-			// (H*N).inverse() = K [r1 r2 t]
-			// so ...
-			// H = HN takes image coords of captured to the normalised gt plane
-			// so HN.inverse() is estimated
-#ifdef DEBUG_CALIBRATION
-			Mat temp4 = checkerboard.clone();
-			for (Quad q : c.quads)
-			{
-				Matrix3f H;
-				H << c.r[0][0], c.r[1][0], c.t[0],
-					 c.r[0][1], c.r[1][1], c.t[1],
-					 c.r[0][2], c.r[1][2], c.t[2];
-				H = K * H;
-				H = H.inverse().eval();
-				H /= H(2, 2);
-				Vector3f x(q.centre.x, q.centre.y, 1);
-				Vector3f Hx = H*x;
-				Hx /= Hx(2);
-				auto qCentre = Point2f(Hx(0), Hx(1));
-
-				putText(temp4, std::to_string(q.number), qCentre,
-					FONT_HERSHEY_COMPLEX_SMALL, 0.8, cvScalar(200, 200, 250), 1, CV_AA);
-
-				circle(temp4, qCentre, 20, (128, 128, 128), 2);
-			}
-			// Debug display
-			imshow("With estimated cal and pose", temp4);
-			waitKey(0);
-#endif
 		}
 	} 
 	else
@@ -306,20 +273,9 @@ int main(int argc, char** argv)
 		return false;
 	}
 
-	
-	// TODO - have a different measure in y
-	// or print them so they are the same
-	//calibrationEstimates[0].K *= mmPerPixelInX;
-	//K(2, 2) = 1;
-
 	// All the estimates should have the new parameters now
 	cout << "K: " << endl << calibrationEstimates[0].K << endl;
 
 	checkerboard.release();
 	return 0;
 }
-/*
-1774.53 21.1188 848.329
-0    1702 40.9809
-0       0       1
-*/
