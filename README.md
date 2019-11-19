@@ -1,9 +1,5 @@
 # Calibration
 
-TODO: comment all the code appropriately
-
-Feedback: This tutorial should be standalone
-
 This exercise is to learn the basics of single camera calibration (can easily be extended to multiple views). As with my [last tutorial](https://github.com/dmckinnon/stitch), the best place to start is Main.cpp, where the components mentioned below are used in sequence. It's a little different in this one to panorama stitching, but I'vew tried to comment the code as best I can for maximum readability. It's not quite written in the same exercise-like format as panorama stitching, since there is less to tweak here and things are more prescribed than described. 
 
 This tutorial follows a paper written in 1998 by Microsoft Research researcher Zhang - [Zhang Calibration](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr98-71.pdf) - which is a simplistic yet sufficient method of calibrating a single camera using a checkerboard. His initial results and data can be found [here](https://www.microsoft.com/en-us/research/project/a-flexible-new-technique-for-camera-calibration-2/?from=http%3A%2F%2Fresearch.microsoft.com%2F~zhang%2Fcalib%2F). For another well-detailed, pseudo-coded explanation of Zhang, but with the mathematics fleshed out, see [this well-written paper by Burger](http://staff.fh-hagenberg.at/burger/publications/reports/2016Calibration/Burger-CameraCalibration-20160516.pdf).
